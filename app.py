@@ -539,7 +539,7 @@ elif page == "Marks Entry":
                     st.success(f"Successfully processed and uploaded marks for {len(records_to_upsert)} students!")
                 except Exception as e:
                     st.error(f"Error processing uploaded file: {e}")
-
+                    
 # --- PAGE 4: RESULTS ANALYSIS & REPORT FORMS HUB ---
 elif page == "Results Analysis":
     st.header("Results Analysis Hub & Report Forms")
@@ -580,7 +580,7 @@ elif page == "Results Analysis":
                 valid_count += 1
         return total, valid_count
 
-    # PREPARE RANKED STUDENTS LIST (EXCLUDES STUDENTS WITH NO MARKS ACROSS ALL 9 SUBJECTS)
+    # PREPARE ACTIVE RANKED STUDENTS LIST
     active_ranked_students = []
     for m in marks_data:
         adm_str = str(m.get("adm_no", "")).strip()
@@ -595,7 +595,7 @@ elif page == "Results Analysis":
                 "marks_row": m
             })
 
-    # Sort Active Students by Rank (Highest total marks first)
+    # Sort Active Students by Rank
     active_ranked_students = sorted(active_ranked_students, key=lambda x: x["total_marks"], reverse=True)
     for idx, item in enumerate(active_ranked_students):
         item["rank"] = idx + 1
@@ -621,7 +621,6 @@ elif page == "Results Analysis":
             
             st.markdown("---")
 
-            # SUBJECT ANALYSIS (VALID MARKS ONLY: x >= 1)
             subject_stats = []
             df_marks = pd.DataFrame(marks_data)
             
@@ -637,9 +636,7 @@ elif page == "Results Analysis":
                         total_points = sum([get_subject_performance(s)[2] for s in valid_scores if get_subject_performance(s)[2] is not None])
                         mean_points = total_points / valid_count
                     else:
-                        total_sub_marks = 0.0
-                        mean_score = 0.0
-                        mean_points = 0.0
+                        total_sub_marks, mean_score, mean_points = 0.0, 0.0, 0.0
 
                     subject_stats.append({
                         "Learning Area": sub,
@@ -660,9 +657,7 @@ elif page == "Results Analysis":
                 )
             
             st.markdown("---")
-
             st.markdown("### 📊 Performance Summary for Each Learning Area")
-            st.caption("Note: Mean scores and aggregate points are calculated strictly out of students with valid submitted marks (x ≥ 1).")
             st.dataframe(df_subject_stats, use_container_width=True)
 
     # =========================================================
@@ -684,7 +679,7 @@ elif page == "Results Analysis":
         if not active_ranked_students:
             st.info(f"No students with active exam scores found in {analysis_grade}. Report forms are suppressed for students without marks.")
         else:
-            # HELPER FUNCTION TO POPULATE report.docx TEMPLATE
+            # HELPER FUNCTION TO POPULATE WORD DOCUMENT TEMPLATE EXACTLY
             def generate_student_docx_object(student_obj):
                 adm_str = student_obj["adm_no"]
                 student_name = student_obj["name"]
@@ -695,74 +690,74 @@ elif page == "Results Analysis":
                     doc = Document("report.docx")
                 else:
                     doc = Document()
-                    doc.add_heading("KEA COMPREHENSIVE SCHOOL", level=1)
 
                 total_score = 0.0
                 top_sub, low_sub = "Mathematics", "English"
                 best_s, worst_s = -1, 101
 
-                replacements = {
-                    "{{NAME}}": student_name,
-                    "{{ADM}}": adm_str,
-                    "{{GRADE}}": analysis_grade,
-                    "{{RANK}}": str(student_rank),
-                    "{{TERM}}": term_val,
-                    "{{OPENING_DATE}}": opening_date,
-                    "{{CLOSING_DATE}}": closing_date,
-                }
-
-                # Process Subject Tags
+                # Calculate marks dictionary
+                subject_scores = {}
                 for sub in LEARNING_AREAS:
                     col_key = sub.lower().replace(" ", "_").replace(".", "").replace("(", "").replace(")", "")
                     val = s_row.get(col_key)
-                    
-                    s_tag = "{{" + f"{sub}_SCORE" + "}}"
-                    g_tag = "{{" + f"{sub}_GRADE" + "}}"
-                    p_tag = "{{" + f"{sub}_PERFORMANCE" + "}}"
-
                     if val is not None and not pd.isna(val) and float(val) >= 1.0:
                         s_num = float(val)
                         total_score += s_num
                         if s_num > best_s: best_s = s_num; top_sub = sub
                         if s_num < worst_s: worst_s = s_num; low_sub = sub
                         g_code, p_lvl, pts = get_subject_performance(s_num)
-                        replacements[s_tag] = str(s_num)
-                        replacements[g_tag] = g_code
-                        replacements[p_tag] = p_lvl
+                        subject_scores[sub.upper()] = (str(s_num), p_lvl)
                     else:
-                        replacements[s_tag] = "-"
-                        replacements[g_tag] = "-"
-                        replacements[p_tag] = "-"
+                        subject_scores[sub.upper()] = ("-", "-")
 
                 overall_g = calculate_total_grade(total_score)
                 teacher_comment = generate_teacher_comment(total_score, top_sub, low_sub)
 
-                replacements["{{TOTAL}}"] = f"{total_score:.0f}"
-                replacements["{{OVERALL_GRADE}}"] = overall_g
-                replacements["{{COMMENT}}"] = teacher_comment
+                # 1. Update Header / Info Tables in Word Document
+                for t in doc.tables:
+                    for row in t.rows:
+                        row_text = " ".join([cell.text for cell in row.cells]).upper()
+                        
+                        # Populate Student Header Details
+                        for cell in row.cells:
+                            if "NAME:" in cell.text.upper():
+                                cell.text = f"NAME: {student_name}"
+                            elif "ADM NO:" in cell.text.upper() or "ADM.NO:" in cell.text.upper():
+                                cell.text = f"ADM NO: {adm_str}"
+                            elif "TERM:" in cell.text.upper():
+                                cell.text = f"TERM: {term_val}"
+                            elif "POSITION:" in cell.text.upper() or "RANK:" in cell.text.upper():
+                                cell.text = f"POSITION: #{student_rank}"
+                            elif "YEAR:" in cell.text.upper():
+                                cell.text = f"YEAR: 2026"
+                                
+                        # Populate Learning Area Table Rows Directly
+                        for sub_name, (score_str, perf_str) in subject_scores.items():
+                            if sub_name in row_text and len(row.cells) >= 5:
+                                row.cells[3].text = score_str
+                                row.cells[4].text = perf_str
 
-                # 1. Replace in Paragraphs
+                # 2. Update Paragraphs (Total Marks, Comments, Signatures at bottom)
+                replacements = {
+                    "TOTAL MARKS: _____": f"TOTAL MARKS: {total_score:.0f}",
+                    "GENERAL PERFORMANCE LEVEL:": f"GENERAL PERFORMANCE LEVEL: {overall_g}",
+                    "TEACHERS GENERAL COMMENT:": f"TEACHERS GENERAL COMMENT:\n\"{teacher_comment}\"",
+                    "CLOSING DATE: __________": f"CLOSING DATE: {closing_date}",
+                    "OPENING DATE: __________": f"OPENING DATE: {opening_date}",
+                }
+
                 for p in doc.paragraphs:
                     for k, v in replacements.items():
                         if k in p.text:
                             p.text = p.text.replace(k, v)
 
-                # 2. Replace in Tables (Maintains exact template layout)
-                for t in doc.tables:
-                    for r in t.rows:
-                        for cell in r.cells:
-                            for k, v in replacements.items():
-                                if k in cell.text:
-                                    cell.text = cell.text.replace(k, v)
-
-                # 3. Insert Stamp
+                # Insert Stamp
                 if stamp_upload or os.path.exists("stamp.png"):
                     stamp_source = stamp_upload if stamp_upload else "stamp.png"
                     for p in doc.paragraphs:
-                        if "HOI Stamp" in p.text or "{{STAMP}}" in p.text:
-                            p.text = ""
+                        if "H.O.I STAMP" in p.text or "{{STAMP}}" in p.text:
                             run = p.add_run()
-                            run.add_picture(stamp_source, width=Inches(1.5))
+                            run.add_picture(stamp_source, width=Inches(1.2))
                             break
 
                 return doc
@@ -779,44 +774,126 @@ elif page == "Results Analysis":
             if selected_student_obj:
                 doc_obj = generate_student_docx_object(selected_student_obj)
                 
-                st.markdown("#### 👁️ Live Template Document View")
+                s_name = selected_student_obj['name']
+                s_adm = selected_student_obj['adm_no']
+                s_rank = selected_student_obj['rank']
+                s_total = selected_student_obj['total_marks']
+                s_row = selected_student_obj['marks_row']
+                overall_g = calculate_total_grade(s_total)
                 
-                # EXACT TEMPLATE CONVERTER: DOCX TO HTML PREVIEW
-                html_out = """
-                <div style="border: 1px solid #D1D5DB; padding: 30px; border-radius: 8px; background-color: #FFFFFF; color: #111827; font-family: Arial, sans-serif; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+                # Derive Comments
+                top_s, low_s = "Mathematics", "English"
+                b_val, w_val = -1, 101
+                for sub in LEARNING_AREAS:
+                    col_key = sub.lower().replace(" ", "_").replace(".", "").replace("(", "").replace(")", "")
+                    val = s_row.get(col_key)
+                    if val is not None and not pd.isna(val) and float(val) >= 1.0:
+                        v = float(val)
+                        if v > b_val: b_val = v; top_s = sub
+                        if v < w_val: w_val = v; low_s = sub
+                teacher_comment = generate_teacher_comment(s_total, top_s, low_s)
+
+                st.markdown("#### 👁️ Live Report Form Document View")
+                
+                # STRUCTURED HTML rendering: Header -> Info -> Learning Area Table -> Footer Summaries
+                html_preview = f"""
+                <div style="border: 2px solid #374151; padding: 25px; border-radius: 8px; background-color: #FFFFFF; color: #111827; font-family: Arial, sans-serif;">
+                    
+                    <!-- HEADER -->
+                    <div style="text-align: center; font-weight: bold; margin-bottom: 15px;">
+                        <h2 style="margin: 0; color: #1E3A8A;">KEA COMPREHENSIVE SCHOOL</h2>
+                        <p style="margin: 2px 0;">P.O. BOX 557-40400 SUNA MIGORI</p>
+                        <h4 style="margin: 5px 0; text-decoration: underline;">STUDENT ASSESSMENT REPORT</h4>
+                    </div>
+
+                    <!-- STUDENT DETAILS TABLE -->
+                    <table style="width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 13px; border: 1px solid #374151;">
+                        <tr>
+                            <td style="border: 1px solid #374151; padding: 6px; font-weight: bold;">NAME: {s_name}</td>
+                            <td style="border: 1px solid #374151; padding: 6px; font-weight: bold;">YEAR: 2026</td>
+                        </tr>
+                        <tr>
+                            <td style="border: 1px solid #374151; padding: 6px; font-weight: bold;">TERM: {term_val}</td>
+                            <td style="border: 1px solid #374151; padding: 6px; font-weight: bold;">POSITION: #{s_rank}</td>
+                        </tr>
+                        <tr>
+                            <td style="border: 1px solid #374151; padding: 6px; font-weight: bold;">ADM NO: {s_adm}</td>
+                            <td style="border: 1px solid #374151; padding: 6px; font-weight: bold;">GRADE: {analysis_grade}</td>
+                        </tr>
+                    </table>
+
+                    <!-- LEARNING AREAS MARKS TABLE -->
+                    <table style="width: 100%; border-collapse: collapse; font-size: 12px; border: 1px solid #374151;">
+                        <tr style="background-color: #F3F4F6; font-weight: bold; text-align: left;">
+                            <th style="border: 1px solid #374151; padding: 6px;">S/N</th>
+                            <th style="border: 1px solid #374151; padding: 6px;">CODE</th>
+                            <th style="border: 1px solid #374151; padding: 6px;">LEARNING AREA</th>
+                            <th style="border: 1px solid #374151; padding: 6px;">MARKS SCORED</th>
+                            <th style="border: 1px solid #374151; padding: 6px;">PERFORMANCE LEVEL</th>
+                        </tr>
                 """
-                
-                # Render Paragraphs
-                for p in doc_obj.paragraphs:
-                    if p.text.strip():
-                        align = "center" if "KEA COMPREHENSIVE" in p.text or "REPORT FORM" in p.text else "left"
-                        weight = "bold" if "KEA COMPREHENSIVE" in p.text or "STUDENT" in p.text or "TOTAL" in p.text else "normal"
-                        html_out += f"<p style='text-align: {align}; font-weight: {weight}; margin: 6px 0; font-size: 13px;'>{p.text}</p>"
 
-                # Render Tables Exactly as laid out in report.docx
-                for table in doc_obj.tables:
-                    html_out += "<table style='width:100%; border-collapse: collapse; margin: 15px 0; font-size: 12px; border: 1px solid #374151;'>"
-                    for i, row in enumerate(table.rows):
-                        bg_style = "background-color: #F3F4F6; font-weight: bold;" if i == 0 else ""
-                        html_out += f"<tr style='{bg_style}'>"
-                        for cell in row.cells:
-                            html_out += f"<td style='border: 1px solid #374151; padding: 6px 10px; text-align: left;'>{cell.text.strip()}</td>"
-                        html_out += "</tr>"
-                    html_out += "</table>"
+                # Populate table rows dynamically for each subject
+                for idx, sub in enumerate(LEARNING_AREAS, 1):
+                    col_key = sub.lower().replace(" ", "_").replace(".", "").replace("(", "").replace(")", "")
+                    val = s_row.get(col_key)
+                    
+                    code_val = f"90{idx}" if idx < 10 else f"9{idx}"
+                    
+                    if val is not None and not pd.isna(val) and float(val) >= 1.0:
+                        s_num = float(val)
+                        g_code, p_lvl, pts = get_subject_performance(s_num)
+                        m_str = f"{s_num:.0f}"
+                        p_str = p_lvl
+                    else:
+                        m_str = "-"
+                        p_str = "-"
 
-                html_out += "</div>"
-                
-                st.components.v1.html(html_out, height=520, scrolling=True)
+                    html_preview += f"""
+                        <tr>
+                            <td style="border: 1px solid #374151; padding: 6px;">{idx}</td>
+                            <td style="border: 1px solid #374151; padding: 6px;">{code_val}</td>
+                            <td style="border: 1px solid #374151; padding: 6px; font-weight: bold;">{sub.upper()}</td>
+                            <td style="border: 1px solid #374151; padding: 6px; font-weight: bold; color: #1E3A8A;">{m_str}</td>
+                            <td style="border: 1px solid #374151; padding: 6px;">{p_str}</td>
+                        </tr>
+                    """
 
-                # Download Single Report
+                # SUMMARY SECTION BELOW THE TABLE
+                html_preview += f"""
+                    </table>
+
+                    <div style="margin-top: 15px; font-size: 13px; border-top: 2px solid #374151; padding-top: 10px;">
+                        <p style="margin: 5px 0;"><strong>TOTAL MARKS:</strong> <span style="font-size: 15px; color: #1E3A8A;">{s_total:.0f}</span> &nbsp;|&nbsp; <strong>GENERAL PERFORMANCE LEVEL:</strong> {overall_g}</p>
+                        
+                        <p style="margin: 10px 0 3px 0;"><strong>TEACHER'S GENERAL COMMENT:</strong></p>
+                        <div style="border-bottom: 1px dashed #374151; padding: 4px; font-style: italic; background-color: #F9FAFB;">"{teacher_comment}"</div>
+                        
+                        <div style="display: flex; justify-content: space-between; margin-top: 15px;">
+                            <div><strong>CLOSING DATE:</strong> {closing_date}</div>
+                            <div><strong>OPENING DATE:</strong> {opening_date}</div>
+                        </div>
+
+                        <div style="display: flex; justify-content: space-between; margin-top: 20px; font-weight: bold;">
+                            <div>CLASS TEACHER SIGNATURE: ____________</div>
+                            <div>H.O.I STAMP & SIGNATURE: ____________</div>
+                        </div>
+                    </div>
+
+                </div>
+                """
+
+                st.components.v1.html(html_preview, height=620, scrolling=True)
+
+                # Download Single File
                 out_stream = io.BytesIO()
                 doc_obj.save(out_stream)
                 out_stream.seek(0)
                 
                 st.download_button(
-                    label=f"📥 Download Report Form for {selected_student_obj['name']} (.docx)",
+                    label=f"📥 Download Assessment Report Form for {s_name} (.docx)",
                     data=out_stream,
-                    file_name=f"Rank_{selected_student_obj['rank']}_{selected_student_obj['adm_no']}_{selected_student_obj['name'].replace(' ', '_')}.docx",
+                    file_name=f"Rank_{s_rank}_{s_adm}_{s_name.replace(' ', '_')}.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     type="primary"
                 )
@@ -825,7 +902,7 @@ elif page == "Results Analysis":
 
             # --- OPTION 2: RANKED BATCH REPORT ZIP GENERATOR ---
             st.subheader("2. Ranked Batch Reports Generator (Entire Grade)")
-            st.caption(f"Generates report forms ordered from Rank #1 to Rank #{len(active_ranked_students)} using report.docx. Students without marks are excluded.")
+            st.caption(f"Generates report forms ordered from Rank #1 to Rank #{len(active_ranked_students)}. Students without marks are excluded.")
 
             if st.button(f"📦 Generate All Ranked Reports for {analysis_grade} (.zip)", type="secondary"):
                 with st.spinner("Compiling ranked report forms... Please wait."):
@@ -850,8 +927,8 @@ elif page == "Results Analysis":
                         data=zip_buffer,
                         file_name=f"{analysis_grade.replace(' ', '_')}_Ranked_Assessment_Reports.zip",
                         mime="application/zip"
-            )                   
-
+                )
+                
 # --- PAGE 5: FEE PAYMENT PORTAL (ADMIN ONLY) ---
 elif page == "Fee Payment":
     if not is_admin_role:
