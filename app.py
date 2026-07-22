@@ -39,7 +39,7 @@ if "logged_in" not in st.session_state:
     st.session_state.role = ""
     st.session_state.full_name = ""
 
-# --- AUTHENTICATION & LOGIN SCREEN ---
+ # --- AUTHENTICATION & LOGIN SCREEN ---
 def login_screen():
     st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>KEA COMPREHENSIVE SCHOOL</h1>", unsafe_allow_html=True)
     st.markdown("<h3 style='text-align: center; color: #4B5563;'>School Management & Information System</h3>", unsafe_allow_html=True)
@@ -50,23 +50,38 @@ def login_screen():
             st.image("logo.png", width=150, use_column_width=True)
         
         st.markdown("### Please Login to Continue")
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
+        username = st.text_input("Username").strip()
+        password = st.text_input("Password", type="password").strip()
         
         if st.button("Login", type="primary", use_container_width=True):
-            if supabase:
+            # 1. Developer Admin Account (Hardcoded Access)
+            if username == "Admin" and password == "janabi@26!":
+                st.session_state.logged_in = True
+                st.session_state.username = "Admin"
+                st.session_state.role = "HOI"  # Gives full administrative access across all pages
+                st.session_state.full_name = "System Developer"
+                st.success("Welcome back, System Developer!")
+                st.rerun()
+                
+            # 2. Database Lookup for Registered Teachers
+            elif supabase:
                 try:
-                    res = supabase.table("teachers").select("*").eq("username", username).eq("password", password).execute()
+                    # Query Supabase teachers table
+                    res = supabase.table("teachers").select("*").ilike("username", username).execute()
                     if res.data:
                         user = res.data[0]
-                        st.session_state.logged_in = True
-                        st.session_state.username = user["username"]
-                        st.session_state.role = user["designation"]
-                        st.session_state.full_name = user["full_name"]
-                        st.success(f"Welcome back, {user['full_name']}!")
-                        st.rerun()
+                        # Verify against teacher default password or stored password
+                        if password == "kea@26" or password == user.get("password"):
+                            st.session_state.logged_in = True
+                            st.session_state.username = user["username"]
+                            st.session_state.role = user["designation"]
+                            st.session_state.full_name = user["full_name"]
+                            st.success(f"Welcome back, {user['full_name']}!")
+                            st.rerun()
+                        else:
+                            st.error("Incorrect password. Default teacher password is 'kea@26'.")
                     else:
-                        st.error("Invalid username or password.")
+                        st.error("Username not found in teachers directory.")
                 except Exception as e:
                     st.error(f"Database error during login: {e}")
             else:
