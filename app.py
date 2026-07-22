@@ -183,16 +183,19 @@ else:
 
 page = st.sidebar.selectbox("Go to", nav_options)
 
-# --- HELPER LOGIC ---
-def calculate_subject_grade(score):
-    if score <= 10: return "BE2", 1
-    elif score <= 20: return "BE1", 2
-    elif score <= 30: return "AE2", 3
-    elif score <= 40: return "AE1", 4
-    elif score <= 56: return "ME2", 5
-    elif score <= 73: return "ME1", 6
-    elif score <= 88: return "EE2", 7
-    else: return "EE1", 8
+# --- HELPER FUNCTION FOR SUBJECT GRADING ($x < 1$ HANDLED AS NULL) ---
+def get_subject_performance(score):
+    if score is None or pd.isna(score) or float(score) < 1.0:
+        return "-", "-", None
+    score = float(score)
+    if score <= 10: return "BE2", "Below Expectation 2", 1
+    elif score <= 20: return "BE1", "Below Expectation 1", 2
+    elif score <= 30: return "AE2", "Approaching Expectation 2", 3
+    elif score <= 40: return "AE1", "Approaching Expectation 1", 4
+    elif score <= 56: return "ME2", "Meeting Expectation 2", 5
+    elif score <= 73: return "ME1", "Meeting Expectation 1", 6
+    elif score <= 88: return "EE2", "Exceeding Expectation 2", 7
+    else: return "EE1", "Exceeding Expectation 1", 8
 
 def calculate_total_grade(total_marks):
     if total_marks <= 112: return "BE2 (Below Expectation 2)"
@@ -317,11 +320,12 @@ elif page == "Students Registration":
 
 # --- PAGE 3: MARKS ENTRY ---
 elif page == "Marks Entry":
-    st.header("Marks Entry Portal")
+    st.header("Subject-Specific Marks Entry Portal")
     
     user_key = st.session_state.username
     teacher_data = TEACHER_ASSIGNMENTS.get(user_key)
     
+    # 1. Determine Allowed Grades & Subjects based on Logged-in Teacher
     if is_admin_role or not teacher_data:
         allowed_grades = [f"Grade {i}" for i in range(1, 10)]
         teacher_grade_map = {g: LEARNING_AREAS for g in allowed_grades}
@@ -331,139 +335,210 @@ elif page == "Marks Entry":
         for item in teacher_data["assignments"]:
             teacher_grade_map[item["grade"]] = item["subjects"]
         allowed_grades = list(teacher_grade_map.keys())
-        st.info(f"Welcome, {st.session_state.full_name}! Select an assigned grade below to enter marks.")
+        st.info(f"Welcome, {st.session_state.full_name}! Select an assigned grade and learning area below.")
 
     if not allowed_grades:
-        st.warning("No grades assigned to your profile.")
+        st.warning("No grades currently assigned to your profile.")
         st.stop()
 
-    target_grade = st.selectbox("Select Assigned Grade", allowed_grades)
+    # 2. Select Grade & Learning Area
+    col_g, col_s = st.columns(2)
+    with col_g:
+        target_grade = st.selectbox("1. Select Grade", allowed_grades)
+    
     assigned_subjects = teacher_grade_map.get(target_grade, LEARNING_AREAS)
     
-    st.markdown(f"**Your Assigned Subjects for {target_grade}:** {', '.join(assigned_subjects)}")
+    with col_s:
+        target_subject = st.selectbox("2. Select Learning Area", assigned_subjects)
+
     st.markdown("---")
+    st.subheader(f"Marking Sheet: {target_grade} — {target_subject}")
+    st.caption("Enter scores out of 100%. Any score less than 1 (x < 1) is saved as Null (-) with no performance level. Previously saved marks are automatically loaded for editing.")
 
-    # Extract clean grade number (e.g. "Grade 7" -> "7") to match any DB format
+    # 3. Fetch Registered Students
     grade_num = target_grade.replace("Grade", "").strip()
-
-    # Fetch Registered Students with flexible grade matching
     try:
-        students_res = supabase.table("students").select("*").execute()
+        students_res = supabase.table("students").select("adm_no, name, grade").execute()
         all_students = students_res.data if students_res.data else []
-        
-        # Filter students matching "Grade 7", "grade 7", "GRADE 7", or "7"
         students = [
             s for s in all_students 
             if str(s.get("grade", "")).strip().lower() in [target_grade.lower(), grade_num, f"grade {grade_num}"]
         ]
+        students = sorted(students, key=lambda x: str(x.get("adm_no", "")))
     except Exception as e:
         students = []
-        st.error(f"Error loading students from database: {e}")
+        st.error(f"Error fetching students from database: {e}")
 
-    # Tabs for Manual & Excel Entry
-    tab_manual_marks, tab_excel_marks = st.tabs(["Manual Marks Entry", "Upload Excel Marks"])
+    if not students:
+        st.warning(f"No students found under '{target_grade}' in the database.")
+    else:
+        col_key = target_subject.lower().replace(" ", "_").replace(".", "").replace("(", "").replace(")", "")
 
-    with tab_manual_marks:
-        if not students:
-            st.warning(f"No students found under '{target_grade}' in the database.")
-        else:
-            selected_student = st.selectbox(
-                "Select Student to Enter Marks", 
-                students, 
-                format_func=lambda x: f"Adm No: {x.get('adm_no', 'N/A')} | Name: {x.get('name', 'Unknown')}"
-            )
+        # 4. Fetch Existing Saved Marks Live from Database
+        existing_marks_map = {}
+        try:
+            m_res = supabase.table("marks").select(f"adm_no, {col_key}").eq("grade", target_grade).execute()
+            if m_res.data:
+                for row in m_res.data:
+                    existing_marks_map[row["adm_no"]] = row.get(col_key)
+        except Exception as e:
+            st.caption(f"Note: Could not load prior marks automatically: {e}")
+
+        # 5. Build Data Table for Entry & Editing
+        editor_data = []
+        for s in students:
+            adm = s["adm_no"]
+            val = existing_marks_map.get(adm)
+            # If mark exists and >= 1, pre-fill it live; otherwise 0.0
+            score_val = float(val) if val is not None and float(val) >= 1.0 else 0.0
             
-            if selected_student:
-                # Fetch existing marks if already saved
-                existing_marks = {}
-                try:
-                    m_res = supabase.table("marks").select("*").eq("adm_no", selected_student["adm_no"]).execute()
-                    if m_res.data:
-                        existing_marks = m_res.data[0]
-                except:
-                    pass
+            editor_data.append({
+                "Adm No": adm,
+                "Student Name": s["name"],
+                "Score (%)": score_val
+            })
 
-                st.markdown(f"### Entering Marks for **{selected_student.get('name')}** ({target_grade})")
+        df_editor = pd.DataFrame(editor_data)
+
+        # Tabs for Manual Sheet & Excel
+        tab_manual_marks, tab_excel_marks = st.tabs(["Manual Sheet Input", "Upload Excel Marks"])
+
+        with tab_manual_marks:
+            with st.form(key=f"form_{target_grade}_{col_key}"):
+                st.markdown("### Class List Marks Input")
+                edited_df = st.data_editor(
+                    df_editor,
+                    column_config={
+                        "Adm No": st.column_config.TextColumn("Adm No", disabled=True),
+                        "Student Name": st.column_config.TextColumn("Student Name", disabled=True),
+                        "Score (%)": st.column_config.NumberColumn(
+                            "Score (%)", 
+                            min_value=0.0, 
+                            max_value=100.0, 
+                            step=1.0,
+                            help="Enter score between 1 and 100. Scores < 1 are saved as Null (-)"
+                        )
+                    },
+                    use_container_width=True,
+                    hide_index=True
+                )
                 
-                with st.form("teacher_marks_form"):
-                    scores = {}
-                    cols = st.columns(min(len(assigned_subjects), 3) if assigned_subjects else 1)
-                    
-                    for idx, subject in enumerate(assigned_subjects):
-                        col_key = subject.lower().replace(" ", "_").replace(".", "").replace("(", "").replace(")", "")
-                        default_val = float(existing_marks.get(col_key, 0.0)) if existing_marks else 0.0
-                        
-                        with cols[idx % len(cols)]:
-                            scores[subject] = st.number_input(
-                                f"{subject} (%)", 
-                                min_value=0.0, 
-                                max_value=100.0, 
-                                value=default_val, 
-                                step=1.0
-                            )
-                    
-                    submit_marks = st.form_submit_button("Preview & Submit Marks")
+                preview_submitted = st.form_submit_button("Preview Marks Sheet", type="secondary")
+
+            # 6. PREVIEW AND FINAL CONFIRMATION
+            if preview_submitted or st.session_state.get(f"preview_active_{target_grade}_{col_key}", False):
+                st.session_state[f"preview_active_{target_grade}_{col_key}"] = True
                 
-                if submit_marks:
-                    payload = existing_marks if existing_marks else {
-                        "adm_no": selected_student["adm_no"],
-                        "grade": target_grade
-                    }
+                st.markdown("---")
+                st.markdown("### 📋 Preview Marks & Performance Levels")
+                
+                preview_rows = []
+                for _, row in edited_df.iterrows():
+                    raw_score = row["Score (%)"]
+                    grade_code, perf_level, pts = get_subject_performance(raw_score)
                     
-                    for subject, score in scores.items():
-                        col_key = subject.lower().replace(" ", "_").replace(".", "").replace("(", "").replace(")", "")
-                        payload[col_key] = score
+                    preview_rows.append({
+                        "Adm No": row["Adm No"],
+                        "Student Name": row["Student Name"],
+                        "Score (%)": raw_score if raw_score >= 1.0 else "-",
+                        "Grade": grade_code,
+                        "Performance Level": perf_level
+                    })
+                    
+                preview_table = pd.DataFrame(preview_rows)
+                st.dataframe(preview_table, use_container_width=True)
+
+                if st.button("✅ Confirm & Submit to Results Analysis", type="primary"):
+                    records_to_upsert = []
+                    for _, row in edited_df.iterrows():
+                        adm = str(row["Adm No"])
+                        raw_score = row["Score (%)"]
                         
-                    # Recalculate total across all 9 areas
-                    payload["total_marks"] = sum(
-                        float(payload.get(sub.lower().replace(" ", "_").replace(".", "").replace("(", "").replace(")", ""), 0)) 
-                        for sub in LEARNING_AREAS
-                    )
-                    
+                        # Fetch existing row to preserve marks in OTHER subjects
+                        existing = {}
+                        try:
+                            ex_res = supabase.table("marks").select("*").eq("adm_no", adm).execute()
+                            if ex_res.data:
+                                existing = ex_res.data[0]
+                        except:
+                            pass
+
+                        rec = existing if existing else {"adm_no": adm, "grade": target_grade}
+                        
+                        # Enforce $x < 1$ as NULL
+                        rec[col_key] = float(raw_score) if raw_score >= 1.0 else None
+                        
+                        # Recalculate Total Marks (summing non-null scores only)
+                        total = 0.0
+                        for sub in LEARNING_AREAS:
+                            s_key = sub.lower().replace(" ", "_").replace(".", "").replace("(", "").replace(")", "")
+                            val = rec.get(s_key)
+                            if val is not None and float(val) >= 1.0:
+                                total += float(val)
+                        
+                        rec["total_marks"] = total
+                        records_to_upsert.append(rec)
+
                     try:
-                        supabase.table("marks").upsert(payload, on_conflict="adm_no").execute()
-                        st.success(f"🎉 Marks successfully submitted for {selected_student.get('name')}! Results Analysis updated.")
+                        supabase.table("marks").upsert(records_to_upsert, on_conflict="adm_no").execute()
+                        st.success(f"🎉 Successfully updated {target_subject} marks for {len(records_to_upsert)} students in {target_grade}!")
+                        st.session_state[f"preview_active_{target_grade}_{col_key}"] = False
                     except Exception as e:
-                        st.error(f"Failed to submit marks to Supabase: {e}")
+                        st.error(f"Failed to submit marks to database: {e}")
 
-    with tab_excel_marks:
-        st.markdown(f"Upload an Excel sheet containing marks for **{target_grade}**.")
-        st.caption("Ensure the Excel has an **'Adm No'** column and columns matching your assigned subjects.")
-        
-        marks_file = st.file_uploader("Upload Marks Excel File", type=["xlsx", "xls"], key="excel_marks_uploader")
-        
-        if marks_file and st.button("Process & Upload Marks"):
-            try:
-                df = pd.read_excel(marks_file)
-                records = []
-                for _, row in df.iterrows():
-                    adm = str(row["Adm No"]).strip()
+        with tab_excel_marks:
+            st.markdown(f"Upload an Excel sheet for **{target_grade} — {target_subject}**.")
+            st.caption("Ensure the file contains an **'Adm No'** column and a column named **'Score'** or matching the subject.")
+            
+            marks_file = st.file_uploader("Choose Excel File", type=["xlsx", "xls"], key=f"uploader_{target_grade}_{col_key}")
+            
+            if marks_file and st.button("Upload Excel Marks Sheet"):
+                try:
+                    df_upload = pd.read_excel(marks_file)
+                    records_to_upsert = []
                     
-                    existing = {}
-                    try:
-                        ex_res = supabase.table("marks").select("*").eq("adm_no", adm).execute()
-                        if ex_res.data:
-                            existing = ex_res.data[0]
-                    except:
-                        pass
+                    score_col = None
+                    for c in df_upload.columns:
+                        if c.lower() in ["score", "marks", target_subject.lower()]:
+                            score_col = c
+                            break
+                    
+                    if not score_col and len(df_upload.columns) >= 2:
+                        score_col = df_upload.columns[1]
 
-                    rec = existing if existing else {"adm_no": adm, "grade": target_grade}
-                    
-                    for subject in assigned_subjects:
-                        if subject in row:
-                            col_key = subject.lower().replace(" ", "_").replace(".", "").replace("(", "").replace(")", "")
-                            rec[col_key] = float(row[subject])
-                    
-                    rec["total_marks"] = sum(
-                        float(rec.get(sub.lower().replace(" ", "_").replace(".", "").replace("(", "").replace(")", ""), 0)) 
-                        for sub in LEARNING_AREAS
-                    )
-                    records.append(rec)
-                
-                supabase.table("marks").upsert(records, on_conflict="adm_no").execute()
-                st.success(f"Successfully updated marks for {len(records)} students!")
-            except Exception as e:
-                st.error(f"Error processing marks Excel file: {e}")
+                    for _, row in df_upload.iterrows():
+                        adm = str(row["Adm No"]).strip()
+                        raw_val = row[score_col]
+                        
+                        try:
+                            score_num = float(raw_val)
+                        except:
+                            score_num = 0.0
+
+                        existing = {}
+                        try:
+                            ex_res = supabase.table("marks").select("*").eq("adm_no", adm).execute()
+                            if ex_res.data:
+                                existing = ex_res.data[0]
+                        except:
+                            pass
+
+                        rec = existing if existing else {"adm_no": adm, "grade": target_grade}
+                        rec[col_key] = score_num if score_num >= 1.0 else None
+                        
+                        total = 0.0
+                        for sub in LEARNING_AREAS:
+                            s_key = sub.lower().replace(" ", "_").replace(".", "").replace("(", "").replace(")", "")
+                            val = rec.get(s_key)
+                            if val is not None and float(val) >= 1.0:
+                                total += float(val)
+                        rec["total_marks"] = total
+                        records_to_upsert.append(rec)
+
+                    supabase.table("marks").upsert(records_to_upsert, on_conflict="adm_no").execute()
+                    st.success(f"Successfully processed and uploaded marks for {len(records_to_upsert)} students!")
+                except Exception as e:
+                    st.error(f"Error processing uploaded file: {e}")
                 
 # --- PAGE 4: RESULTS ANALYSIS ---
 elif page == "Results Analysis":
