@@ -315,7 +315,7 @@ elif page == "Students Registration":
             except Exception as e:
                 st.error(f"Error processing excel file: {e}")
 
-# --- PAGE 3: MARKS ENTRY (TAILORED TO LOGGED-IN TEACHER) ---
+ # --- PAGE 3: MARKS ENTRY ---
 elif page == "Marks Entry":
     st.header("Marks Entry Portal")
     
@@ -325,69 +325,101 @@ elif page == "Marks Entry":
     if is_admin_role or not teacher_data:
         allowed_grades = [f"Grade {i}" for i in range(1, 10)]
         teacher_grade_map = {g: LEARNING_AREAS for g in allowed_grades}
-        st.info("Log-in Mode: Administrator Mode (Full Access to All Grades & Subjects)")
+        st.info("Log-in Mode: Administrator Mode (Full Access)")
     else:
         teacher_grade_map = {}
         for item in teacher_data["assignments"]:
             teacher_grade_map[item["grade"]] = item["subjects"]
         allowed_grades = list(teacher_grade_map.keys())
-        st.info(f"Log-in Mode: Teacher Mode ({st.session_state.full_name}) - Viewing Assigned Classes & Subjects")
+        st.info(f"Welcome, {st.session_state.full_name}! Select an assigned grade below to enter marks.")
 
     if not allowed_grades:
-        st.warning("No grades currently assigned to your profile.")
+        st.warning("No grades assigned to your profile.")
         st.stop()
 
     target_grade = st.selectbox("Select Assigned Grade", allowed_grades)
     assigned_subjects = teacher_grade_map.get(target_grade, LEARNING_AREAS)
     
-    st.markdown(f"**Assigned Learning Areas for {target_grade}:** {', '.join(assigned_subjects)}")
+    st.markdown(f"**Your Assigned Subjects for {target_grade}:** {', '.join(assigned_subjects)}")
+    st.markdown("---")
 
-    tab_manual_marks, tab_excel_marks = st.tabs(["Manual Marks Entry", "Upload Excel Marks"])
-    
-    with tab_manual_marks:
-        try:
-            students_res = supabase.table("students").select("*").eq("grade", target_grade).execute()
-            students = students_res.data
-        except:
-            students = []
+    # Fetch Registered Students in target grade
+    try:
+        students_res = supabase.table("students").select("*").eq("grade", target_grade).execute()
+        students = students_res.data
+    except Exception as e:
+        students = []
+        st.error(f"Error loading students: {e}")
+
+    if not students:
+        st.warning(f"No students registered under {target_grade} yet.")
+    else:
+        selected_student = st.selectbox(
+            "Select Student to Enter Marks", 
+            students, 
+            format_func=lambda x: f"Adm No: {x['adm_no']} | Name: {x['name']}"
+        )
+        
+        if selected_student:
+            # Fetch existing marks if already saved
+            existing_marks = {}
+            try:
+                m_res = supabase.table("marks").select("*").eq("adm_no", selected_student["adm_no"]).execute()
+                if m_res.data:
+                    existing_marks = m_res.data[0]
+            except:
+                pass
+
+            st.markdown(f"### Entering Marks for **{selected_student['name']}** ({target_grade})")
             
-        if not students:
-            st.warning(f"No registered students found in {target_grade}.")
-        else:
-            selected_student = st.selectbox("Select Student", students, format_func=lambda x: f"{x['adm_no']} - {x['name']}")
-            if selected_student:
-                # Fetch existing marks if any
-                existing_marks = {}
-                try:
-                    m_res = supabase.table("marks").select("*").eq("adm_no", selected_student["adm_no"]).execute()
-                    if m_res.data:
-                        existing_marks = m_res.data[0]
-                except:
-                    pass
-
-                with st.form("manual_marks_form"):
-                    st.markdown(f"Entering score out of **100%** for **{selected_student['name']}**")
-                    scores = {}
-                    for subject in assigned_subjects:
-                        col_key = subject.lower().replace(" ", "_")
-                        default_val = float(existing_marks.get(col_key, 0.0)) if existing_marks else 0.0
-                        scores[subject] = st.number_input(f"{subject} (%)", min_value=0.0, max_value=100.0, value=default_val, step=0.5)
+            with st.form("teacher_marks_form"):
+                scores = {}
+                cols = st.columns(len(assigned_subjects) if len(assigned_subjects) <= 3 else 3)
+                
+                for idx, subject in enumerate(assigned_subjects):
+                    col_key = subject.lower().replace(" ", "_")
+                    default_val = float(existing_marks.get(col_key, 0.0)) if existing_marks else 0.0
                     
-                    submitted = st.form_submit_button("Submit Marks")
-                    if submitted:
-                        payload = existing_marks if existing_marks else {
-                            "adm_no": selected_student["adm_no"],
-                            "grade": target_grade
-                        }
-                        for subject, score in scores.items():
-                            payload[subject.lower().replace(" ", "_")] = score
-                            
-                        # Recalculate total marks across all 9 subjects
-                        total_score = sum(float(payload.get(sub.lower().replace(" ", "_"), 0)) for sub in LEARNING_AREAS)
-                        payload["total_marks"] = total_score
+                    with cols[idx % len(cols)]:
+                        scores[subject] = st.number_input(
+                            f"{subject} (Score out of 100%)", 
+                            min_value=0.0, 
+                            max_value=100.0, 
+                            value=default_val, 
+                            step=1.0
+                        )
+                
+                preview_btn = st.form_submit_button("Preview & Confirm Marks")
+            
+            # PREVIEW AND FINAL SUBMIT
+            if preview_btn:
+                st.markdown("#### 📋 Marks Summary Preview")
+                preview_df = pd.DataFrame([
+                    {"Subject": sub, "Entered Score (%)": score, "Grade": calculate_subject_grade(score)[0]}
+                    for sub, score in scores.items()
+                ])
+                st.table(preview_df)
+                
+                if st.button("✅ Submit Marks to Results Analysis", type="primary"):
+                    payload = existing_marks if existing_marks else {
+                        "adm_no": selected_student["adm_no"],
+                        "grade": target_grade
+                    }
+                    
+                    for subject, score in scores.items():
+                        payload[subject.lower().replace(" ", "_")] = score
                         
+                    # Recalculate total across all 9 areas
+                    payload["total_marks"] = sum(
+                        float(payload.get(sub.lower().replace(" ", "_"), 0)) 
+                        for sub in LEARNING_AREAS
+                    )
+                    
+                    try:
                         supabase.table("marks").upsert(payload, on_conflict="adm_no").execute()
-                        st.success(f"Marks updated for {selected_student['name']}!")
+                        st.success(f"🎉 Marks successfully saved for {selected_student['name']}! Results Analysis updated.")
+                    except Exception as e:
+                        st.error(f"Failed to submit marks: {e}")
 
     with tab_excel_marks:
         st.markdown(f"Upload Excel for **{target_grade}**. Excel headers must match subject names.")
@@ -622,26 +654,43 @@ elif page == "Fee Payment":
         except Exception as e:
             st.error(f"Error calculating balances: {e}")
 
-# --- PAGE 6: TEACHERS PORTAL ---
+ # --- PAGE 6: TEACHERS PORTAL ---
 elif page == "Teachers Portal":
-    st.header("Teachers Portal & Subject Assignments")
-    st.info("""
-    **Assigned Learning Areas & Responsibilities:**
-    * **Mr. Eliars Opondo:** English Grade 7, 8 and 9, Pretechnical Studies Grade 7, C.A.S Grade 8.
-    * **Mr. Lucas Onyango:** Class Teacher Grade 9, Integrated Science Grade 7 and 8, Agriculture Grade 8 and 9.
-    * **Mr. Vincent Omwanda:** Class Teacher Grade 8, Social Studies Grade 7, 8 and 9, Kiswahili Grade 8 and 9.
-    * **Madam Grace Otieno:** Class Teacher Grade 7, CRE Grade 7 and 8, Agriculture Grade 7, Integrated Science Grade 9.
-    * **Mr. Elias Achiyo:** Kiswahili Grade 7, CRE Grade 9.
-    * **Mr. Valentine Tiberius:** Mathematics Grade 7 and 9.
-    * **Mr. Elijah Aloyo:** Mathematics Grade 8, Pretechnical Studies Grade 8 and 9, C.A.S Grade 7 and 9.
-    """)
+    st.header(f"Teacher Portal — {st.session_state.full_name}")
     
-    st.markdown("### Registered Teachers Directory")
-    try:
-        t_res = supabase.table("teachers").select("full_name", "username", "designation").execute()
-        st.dataframe(pd.DataFrame(t_res.data), use_container_width=True)
-    except:
-        st.warning("Teachers directory could not be loaded.")
+    user_key = st.session_state.username
+    teacher_info = TEACHER_ASSIGNMENTS.get(user_key)
+    
+    if is_admin_role and not teacher_info:
+        st.markdown("### Administrator Overview")
+        st.info("You are logged in with Administrative privileges.")
+        try:
+            t_res = supabase.table("teachers").select("full_name", "username", "designation").execute()
+            st.dataframe(pd.DataFrame(t_res.data), use_container_width=True)
+        except:
+            pass
+    elif teacher_info:
+        st.markdown("### Your Assigned Learning Areas & Responsibilities")
+        
+        # Display ONLY the logged in teacher's assignments
+        for item in teacher_info["assignments"]:
+            grade = item["grade"]
+            subs = ", ".join(item["subjects"])
+            st.success(f"📌 **{grade}:** Teaching **{subs}**")
+            
+            # List students in this teacher's assigned class directly on their portal
+            try:
+                st_res = supabase.table("students").select("adm_no", "assessment_no", "name").eq("grade", grade).execute()
+                if st_res.data:
+                    st.markdown(f"**Registered Students in {grade}:**")
+                    st.dataframe(pd.DataFrame(st_res.data), use_container_width=True)
+                else:
+                    st.caption(f"No students currently registered under {grade}.")
+            except Exception as e:
+                st.error(f"Could not load students for {grade}: {e}")
+            st.markdown("---")
+    else:
+        st.warning("No teaching assignments found for your account.")
 
 # --- PAGE 7: TEACHER TIME LOGIN ---
 elif page == "Teacher Time Login":
