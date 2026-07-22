@@ -146,7 +146,7 @@ if not st.session_state.logged_in:
 
 # --- ROLE & NAVIGATION SETUP ---
 role = st.session_state.role
-is_admin_role = role in ["HOI", "DHOI", "Senior teacher"]
+is_admin_role = role in ["HOI", "DHOI", "DEVELOPER"]
 
 st.sidebar.markdown(f"**Logged in as:** {st.session_state.full_name}")
 st.sidebar.markdown(f"**Role:** {role}")
@@ -176,7 +176,6 @@ else:
         "Marks Entry", 
         "Results Analysis", 
         "Teachers Portal", 
-        "Teacher Time Login", 
         "Newsletter", 
         "School Contact"
     ]
@@ -540,7 +539,7 @@ elif page == "Marks Entry":
                 except Exception as e:
                     st.error(f"Error processing uploaded file: {e}")
                 
-# --- PAGE 4: RESULTS ANALYSIS ---
+# --- PAGE 4: RESULTS ANALYSIS & REPORT FORMS HUB ---
 elif page == "Results Analysis":
     st.header("Results Analysis Hub & Report Forms")
     
@@ -548,100 +547,259 @@ elif page == "Results Analysis":
     
     tab_overview, tab_reports = st.tabs(["Tab 1: General Performance Overview", "Tab 2: Assessment Report Forms Hub"])
     
+    # 1. FETCH DATA WITH STRICT STRING NORMALIZATION
+    grade_num = analysis_grade.replace("Grade", "").strip()
     try:
-        marks_res = supabase.table("marks").select("*").eq("grade", analysis_grade).execute()
-        marks_data = marks_res.data
-        students_res = supabase.table("students").select("*").eq("grade", analysis_grade).execute()
-        students_data = {s["adm_no"]: s for s in students_res.data}
-    except:
-        marks_data, students_data = [], {}
+        # Fetch Marks
+        m_res = supabase.table("marks").select("*").execute()
+        all_marks = m_res.data if m_res.data else []
+        marks_data = [
+            m for m in all_marks 
+            if str(m.get("grade", "")).strip().lower() in [analysis_grade.lower(), grade_num, f"grade {grade_num}"]
+        ]
+        
+        # Fetch Students Directory (Ensure exact string mapping for names)
+        s_res = supabase.table("students").select("*").execute()
+        students_dict = {}
+        if s_res.data:
+            for s in s_res.data:
+                clean_adm = str(s.get("adm_no", "")).strip()
+                students_dict[clean_adm] = s
+    except Exception as e:
+        marks_data, students_dict = [], {}
+        st.error(f"Error fetching analysis data: {e}")
 
+    # =========================================================
+    # TAB 1: GENERAL PERFORMANCE OVERVIEW
+    # =========================================================
     with tab_overview:
         if not marks_data:
-            st.info("No marks data available for this grade yet.")
+            st.info(f"No marks data recorded for {analysis_grade} yet.")
         else:
             df_marks = pd.DataFrame(marks_data)
-            df_marks["student_name"] = df_marks["adm_no"].apply(lambda x: students_data.get(x, {}).get("name", "Unknown"))
+            
+            # Map Student Names accurately (Fixes 'Unknown' names error)
+            df_marks["clean_adm"] = df_marks["adm_no"].apply(lambda x: str(x).strip())
+            df_marks["student_name"] = df_marks["clean_adm"].apply(
+                lambda x: students_dict.get(x, {}).get("name", f"Student {x}")
+            )
+            
+            # Calculate Total Marks per Student (Only counting scores >= 1)
+            def calc_row_total(row):
+                t = 0.0
+                for sub in LEARNING_AREAS:
+                    k = sub.lower().replace(" ", "_").replace(".", "").replace("(", "").replace(")", "")
+                    val = row.get(k)
+                    if val is not None and not pd.isna(val) and float(val) >= 1.0:
+                        t += float(val)
+                return t
+
+            df_marks["total_marks"] = df_marks.apply(calc_row_total, axis=1)
             df_marks = df_marks.sort_values(by="total_marks", ascending=False).reset_index(drop=True)
             df_marks["Rank"] = df_marks.index + 1
             
-            st.markdown("### Top Ten Students")
-            top_10 = df_marks.head(10)[["Rank", "adm_no", "student_name", "total_marks"]]
-            top_10["Overall Grade"] = top_10["total_marks"].apply(calculate_total_grade)
+            # --- SECTION 1: TOP TEN STUDENTS ---
+            st.markdown("### 🏆 Top Ten Students")
+            top_10 = df_marks.head(10)[["Rank", "clean_adm", "student_name", "total_marks"]].copy()
+            top_10.rename(columns={"clean_adm": "Adm No", "student_name": "Student Name", "total_marks": "Total Marks"}, inplace=True)
+            top_10["Overall Grade"] = top_10["Total Marks"].apply(calculate_total_grade)
             st.dataframe(top_10, use_container_width=True)
             
-            st.markdown("### Best Performed Learning Areas")
-            subject_means = {}
-            for sub in LEARNING_AREAS:
-                col_name = sub.lower().replace(" ", "_")
-                if col_name in df_marks.columns:
-                    subject_means[sub] = df_marks[col_name].mean()
-            
-            sorted_subjects = sorted(subject_means.items(), key=lambda x: x[1], reverse=True)
-            df_subs = pd.DataFrame(sorted_subjects, columns=["Learning Area", "Mean Score (%)"])
-            st.dataframe(df_subs, use_container_width=True)
+            st.markdown("---")
 
+            # --- SECTION 2 & 3: SUBJECT ANALYSIS (VALID MARKS ONLY: x >= 1) ---
+            subject_stats = []
+            
+            for sub in LEARNING_AREAS:
+                col_name = sub.lower().replace(" ", "_").replace(".", "").replace("(", "").replace(")", "")
+                if col_name in df_marks.columns:
+                    # Filter valid scores strictly >= 1
+                    valid_scores = [float(v) for v in df_marks[col_name] if v is not None and not pd.isna(v) and float(v) >= 1.0]
+                    valid_count = len(valid_scores)
+                    
+                    if valid_count > 0:
+                        total_sub_marks = sum(valid_scores)
+                        mean_score = total_sub_marks / valid_count
+                        
+                        # Calculate aggregate points for valid students
+                        total_points = sum([get_subject_performance(s)[2] for s in valid_scores if get_subject_performance(s)[2] is not None])
+                        mean_points = total_points / valid_count
+                    else:
+                        total_sub_marks = 0.0
+                        mean_score = 0.0
+                        mean_points = 0.0
+
+                    subject_stats.append({
+                        "Learning Area": sub,
+                        "Valid Students": valid_count,
+                        "Total Marks": round(total_sub_marks, 1),
+                        "Mean Score (%)": round(mean_score, 2),
+                        "Aggregate Mean Points": round(mean_points, 2)
+                    })
+
+            df_subject_stats = pd.DataFrame(subject_stats)
+
+            # --- SECTION 2: BEST PERFORMED LEARNING AREA ---
+            if not df_subject_stats.empty and df_subject_stats["Mean Score (%)"].max() > 0:
+                best_subject = df_subject_stats.sort_values(by="Mean Score (%)", ascending=False).iloc[0]
+                st.markdown(f"### ⭐ Best Performed Learning Area")
+                st.success(
+                    f"**{best_subject['Learning Area']}** with a Mean Score of **{best_subject['Mean Score (%)']}%** "
+                    f"and Aggregate Points of **{best_subject['Aggregate Mean Points']}** (based on {best_subject['Valid Students']} valid submissions)."
+                )
+            
+            st.markdown("---")
+
+            # --- SECTION 3: PERFORMANCE FOR EACH LEARNING AREA ---
+            st.markdown("### 📊 Performance Summary for Each Learning Area")
+            st.caption("Note: Mean scores and aggregate points are calculated strictly out of students with valid submitted marks (x ≥ 1).")
+            st.dataframe(df_subject_stats, use_container_width=True)
+
+    # =========================================================
+    # TAB 2: ASSESSMENT REPORT FORMS HUB (TEMPLATE BASED)
+    # =========================================================
     with tab_reports:
         st.markdown("### Assessment Report Form Generator")
-        col_settings1, col_settings2 = st.columns(2)
-        with col_settings1:
-            term_val = st.selectbox("Term", ["Term 1", "Term 2", "Term 3"])
-            opening_date = st.text_input("Opening Date", "14/09/2026")
-        with col_settings2:
-            closing_date = st.text_input("Closing Date", "04/12/2026")
-            stamp_file = st.file_uploader("Upload Official School Stamp (stamp.png)", type=["png", "jpg"])
-            
-        if marks_data:
-            student_options = [(m["adm_no"], students_data.get(m["adm_no"], {}).get("name", "Unknown")) for m in marks_data]
-            selected_adm = st.selectbox("Select Student for Individual Report", student_options, format_func=lambda x: f"{x[0]} - {x[1]}")
-            
-            if st.button("Generate & Download Single Report (.docx)"):
-                doc = Document()
-                doc.add_heading("KEA COMPREHENSIVE SCHOOL", level=1)
-                doc.add_paragraph("OFFICIAL PUPIL ASSESSMENT REPORT FORM")
-                doc.add_paragraph(f"Term: {term_val} | Opening: {opening_date} | Closing: {closing_date}")
-                
-                s_info = students_data.get(selected_adm[0], {})
-                s_marks = next((m for m in marks_data if m["adm_no"] == selected_adm[0]), {})
-                
-                doc.add_paragraph(f"Name: {s_info.get('name')} | Adm No: {s_info.get('adm_no')} | Grade: {analysis_grade}")
-                
-                table = doc.add_table(rows=1, cols=4)
-                hdr = table.rows[0].cells
-                hdr[0].text = "Learning Area"
-                hdr[1].text = "Score (%)"
-                hdr[2].text = "Achievement"
-                hdr[3].text = "Points"
-                
-                total = 0
+        
+        col_s1, col_s2 = st.columns(2)
+        with col_s1:
+            term_val = st.selectbox("Term", ["Term 1", "Term 2", "Term 3"], key="rep_term")
+            opening_date = st.text_input("Opening Date", "14/09/2026", key="rep_open")
+        with col_s2:
+            closing_date = st.text_input("Closing Date", "04/12/2026", key="rep_close")
+            stamp_upload = st.file_uploader("Upload Stamp Image (stamp.png)", type=["png", "jpg"], key="rep_stamp")
+
+        st.markdown("---")
+        
+        if not marks_data:
+            st.info(f"No students with recorded marks found in {analysis_grade}.")
+        else:
+            # HELPER FUNCTION TO FILL report.docx TEMPLATE
+            def fill_student_docx(adm_str, student_name, student_marks_row):
+                if os.path.exists("report.docx"):
+                    doc = Document("report.docx")
+                else:
+                    doc = Document()
+                    doc.add_heading("KEA COMPREHENSIVE SCHOOL", level=1)
+                    doc.add_paragraph("OFFICIAL PUPIL ASSESSMENT REPORT FORM")
+
+                total_score = 0.0
+                top_sub, low_sub = "Mathematics", "English"
+                best_s, worst_s = -1, 101
+
+                replacements = {
+                    "{{NAME}}": student_name,
+                    "{{ADM}}": adm_str,
+                    "{{GRADE}}": analysis_grade,
+                    "{{TERM}}": term_val,
+                    "{{OPENING_DATE}}": opening_date,
+                    "{{CLOSING_DATE}}": closing_date,
+                }
+
+                # Process Subject Tags
                 for sub in LEARNING_AREAS:
-                    col_key = sub.lower().replace(" ", "_")
-                    score = s_marks.get(col_key, 0)
-                    grade_name, pts = calculate_subject_grade(score)
-                    row = table.add_row().cells
-                    row[0].text = sub
-                    row[1].text = str(score)
-                    row[2].text = grade_name
-                    row[3].text = str(pts)
-                    total += score
+                    col_key = sub.lower().replace(" ", "_").replace(".", "").replace("(", "").replace(")", "")
+                    val = student_marks_row.get(col_key)
+                    
+                    if val is not None and not pd.isna(val) and float(val) >= 1.0:
+                        s_num = float(val)
+                        total_score += s_num
+                        if s_num > best_s: best_s = s_num; top_sub = sub
+                        if s_num < worst_s: worst_s = s_num; low_sub = sub
+                        g_code, p_lvl, pts = get_subject_performance(s_num)
+                        replacements[f"{{{{{sub}_SCORE}}}}}"] = str(s_num)
+                        replacements[f"{{{{{sub}_GRADE}}}}}"] = g_code
+                    else:
+                        replacements[f"{{{{{sub}_SCORE}}}}}"] = "-"
+                        replacements[f"{{{{{sub}_GRADE}}}}}"] = "-"
+
+                overall_g = calculate_total_grade(total_score)
+                teacher_comment = generate_teacher_comment(total_score, top_sub, low_sub)
+
+                replacements["{{TOTAL}}"] = f"{total_score:.0f}"
+                replacements["{{OVERALL_GRADE}}"] = overall_g
+                replacements["{{COMMENT}}"] = teacher_comment
+
+                # Replace in Paragraphs
+                for p in doc.paragraphs:
+                    for k, v in replacements.items():
+                        if k in p.text:
+                            p.text = p.text.replace(k, v)
+
+                # Replace in Tables
+                for t in doc.tables:
+                    for r in t.rows:
+                        for cell in r.cells:
+                            for k, v in replacements.items():
+                                if k in cell.text:
+                                    cell.text = cell.text.replace(k, v)
+
+                # Insert Official Stamp if placeholder present
+                if stamp_upload or os.path.exists("stamp.png"):
+                    stamp_source = stamp_upload if stamp_upload else "stamp.png"
+                    for p in doc.paragraphs:
+                        if "HOI Stamp" in p.text or "{{STAMP}}" in p.text:
+                            p.text = ""
+                            run = p.add_run()
+                            run.add_picture(stamp_source, width=Inches(1.5))
+                            break
+
+                out_stream = io.BytesIO()
+                doc.save(out_stream)
+                out_stream.seek(0)
+                return out_stream
+
+            # --- OPTION 1: SINGLE REPORT FORM VIEW ---
+            st.subheader("1. Single Student Assessment Report")
+            student_options = [
+                (str(m["adm_no"]).strip(), students_dict.get(str(m["adm_no"]).strip(), {}).get("name", f"Student {m['adm_no']}"))
+                for m in marks_data
+            ]
+            
+            selected_student_tuple = st.selectbox(
+                "Select Student for Individual Report", 
+                student_options, 
+                format_func=lambda x: f"Adm No: {x[0]} | Name: {x[1]}"
+            )
+
+            if st.button("Generate Single Report Form (.docx)", type="primary"):
+                s_adm, s_name = selected_student_tuple
+                s_row = next((m for m in marks_data if str(m["adm_no"]).strip() == s_adm), {})
                 
-                doc.add_paragraph(f"\nTotal Marks: {total} / 900 | Overall Grade: {calculate_total_grade(total)}")
-                doc.add_paragraph(f"Class Teacher Comments: {generate_teacher_comment(total, 'Mathematics', 'English')}")
-                
-                if stamp_file:
-                    doc.add_paragraph("\n[HOI Stamp Area]")
-                    doc.add_picture(stamp_file, width=Inches(1.5))
-                
-                bio_io = io.BytesIO()
-                doc.save(bio_io)
-                bio_io.seek(0)
-                
+                doc_bytes = fill_student_docx(s_adm, s_name, s_row)
                 st.download_button(
-                    label="Download Report Form (.docx)",
-                    data=bio_io,
-                    file_name=f"{selected_adm[0]}_Report_Form.docx",
+                    label=f"📥 Download Report Form for {s_name}",
+                    data=doc_bytes,
+                    file_name=f"{s_adm}_{s_name.replace(' ', '_')}_Report.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 )
+
+            st.markdown("---")
+
+            # --- OPTION 2: BATCH REPORT ZIP GENERATOR ---
+            st.subheader("2. Batch Assessment Reports Generator (Entire Grade)")
+            st.caption("Generate and download all student report forms for this grade using report.docx into a single ZIP archive.")
+
+            if st.button(f"📦 Generate All Report Forms for {analysis_grade} (.zip)", type="secondary"):
+                with st.spinner("Generating batch report forms... Please wait."):
+                    zip_buffer = io.BytesIO()
+                    
+                    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                        for s_adm, s_name in student_options:
+                            s_row = next((m for m in marks_data if str(m["adm_no"]).strip() == s_adm), {})
+                            single_doc = fill_student_docx(s_adm, s_name, s_row)
+                            file_filename = f"{s_adm}_{s_name.replace(' ', '_')}_Report.docx"
+                            zip_file.writestr(file_filename, single_doc.getvalue())
+
+                    zip_buffer.seek(0)
+                    st.success(f"Successfully compiled {len(student_options)} report forms!")
+                    
+                    st.download_button(
+                        label=f"📥 Download All {analysis_grade} Reports (.zip)",
+                        data=zip_buffer,
+                        file_name=f"{analysis_grade.replace(' ', '_')}_Assessment_Reports.zip",
+                        mime="application/zip"
+            )
 
 # --- PAGE 5: FEE PAYMENT PORTAL (ADMIN ONLY) ---
 elif page == "Fee Payment":
