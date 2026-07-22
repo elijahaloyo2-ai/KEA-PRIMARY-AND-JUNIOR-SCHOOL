@@ -206,16 +206,17 @@ def calculate_total_grade(total_marks):
     elif total_marks <= 785: return "EE2 (Exceeding Expectation 2)"
     else: return "EE1 (Exceeding Expectation 1)"
 
-def generate_teacher_comment(total_marks, top_subject, low_subject):
-    avg = total_marks / 9
-    if avg >= 75:
-        return f"Exceptional performance! Demonstrates outstanding mastery across all learning areas, particularly shining in {top_subject}. Keep up the stellar academic discipline."
-    elif avg >= 55:
-        return f"Good work! Shows solid understanding, especially in {top_subject}. Minor reinforcement is encouraged in {low_subject} to achieve excellence."
-    elif avg >= 35:
-        return f"Fair performance. Shows potential in {top_subject}, but requires dedicated extra effort and support in {low_subject} to bridge learning gaps."
+# --- HELPER FUNCTION: FORMULATE TEACHER'S COMMENT ---
+def generate_teacher_comment(total_score, top_subject, low_subject):
+    overall_grade = calculate_total_grade(total_score)
+    if "EE" in overall_grade:
+        return f"An excellent performance! Demonstrates outstanding mastery across learning areas, especially in {top_subject}. Keep up the high standard!"
+    elif "ME" in overall_grade:
+        return f"Good performance. Shows consistent effort and understanding, particularly in {top_subject}. Aim to put more effort into {low_subject} for better results."
+    elif "AE" in overall_grade:
+        return f"Fair performance. Shows potential in {top_subject}, but requires more focus and practice in {low_subject} to improve overall standing."
     else:
-        return f"Needs significant academic intervention and regular consultation with teachers. Particular attention required in {low_subject}."
+        return f"Below expectations. Needs active academic support and dedicated revision, particularly in {low_subject}. Steady practice in {top_subject} will build confidence."
 
 # --- PAGE 1: DASHBOARD ---
 if page == "Dashboard":
@@ -550,7 +551,6 @@ elif page == "Results Analysis":
     # 1. FETCH DATA WITH STRICT STRING NORMALIZATION
     grade_num = analysis_grade.replace("Grade", "").strip()
     try:
-        # Fetch Marks
         m_res = supabase.table("marks").select("*").execute()
         all_marks = m_res.data if m_res.data else []
         marks_data = [
@@ -558,7 +558,6 @@ elif page == "Results Analysis":
             if str(m.get("grade", "")).strip().lower() in [analysis_grade.lower(), grade_num, f"grade {grade_num}"]
         ]
         
-        # Fetch Students Directory
         s_res = supabase.table("students").select("*").execute()
         students_dict = {}
         if s_res.data:
@@ -569,7 +568,7 @@ elif page == "Results Analysis":
         marks_data, students_dict = [], {}
         st.error(f"Error fetching analysis data: {e}")
 
-    # HELPER TO CALCULATE VALID TOTAL AND CHECK IF ACTIVE
+    # HELPER TO CALCULATE VALID TOTAL & COUNT EXAMS TAKEN
     def process_student_scores(m_row):
         total = 0.0
         valid_count = 0
@@ -581,14 +580,13 @@ elif page == "Results Analysis":
                 valid_count += 1
         return total, valid_count
 
-    # PREPARE ACTIVE RANKED STUDENTS LIST (ONLY STUDENTS WITH AT LEAST 1 VALID MARK)
+    # PREPARE RANKED STUDENTS LIST (EXCLUDES STUDENTS WITH NO MARKS ACROSS ALL 9 SUBJECTS)
     active_ranked_students = []
     for m in marks_data:
         adm_str = str(m.get("adm_no", "")).strip()
         s_name = students_dict.get(adm_str, {}).get("name", f"Student {adm_str}")
         tot_marks, valid_cnt = process_student_scores(m)
         
-        # EXCLUDE STUDENTS WITH NO VALID MARKS ACROSS ALL SUBJECTS
         if valid_cnt > 0:
             active_ranked_students.append({
                 "adm_no": adm_str,
@@ -609,7 +607,6 @@ elif page == "Results Analysis":
         if not active_ranked_students:
             st.info(f"No active student records with submitted marks found in {analysis_grade}.")
         else:
-            # SECTION 1: TOP TEN STUDENTS
             st.markdown("### 🏆 Top Ten Students")
             top_10_rows = []
             for item in active_ranked_students[:10]:
@@ -624,7 +621,7 @@ elif page == "Results Analysis":
             
             st.markdown("---")
 
-            # SECTION 2 & 3: SUBJECT ANALYSIS (VALID MARKS ONLY: x >= 1)
+            # SUBJECT ANALYSIS (VALID MARKS ONLY: x >= 1)
             subject_stats = []
             df_marks = pd.DataFrame(marks_data)
             
@@ -654,7 +651,6 @@ elif page == "Results Analysis":
 
             df_subject_stats = pd.DataFrame(subject_stats)
 
-            # SECTION 2: BEST PERFORMED LEARNING AREA
             if not df_subject_stats.empty and df_subject_stats["Mean Score (%)"].max() > 0:
                 best_subject = df_subject_stats.sort_values(by="Mean Score (%)", ascending=False).iloc[0]
                 st.markdown(f"### ⭐ Best Performed Learning Area")
@@ -665,13 +661,12 @@ elif page == "Results Analysis":
             
             st.markdown("---")
 
-            # SECTION 3: PERFORMANCE FOR EACH LEARNING AREA
             st.markdown("### 📊 Performance Summary for Each Learning Area")
             st.caption("Note: Mean scores and aggregate points are calculated strictly out of students with valid submitted marks (x ≥ 1).")
             st.dataframe(df_subject_stats, use_container_width=True)
 
     # =========================================================
-    # TAB 2: ASSESSMENT REPORT FORMS HUB (TEMPLATE BASED)
+    # TAB 2: ASSESSMENT REPORT FORMS HUB
     # =========================================================
     with tab_reports:
         st.markdown("### Assessment Report Form Generator")
@@ -689,7 +684,7 @@ elif page == "Results Analysis":
         if not active_ranked_students:
             st.info(f"No students with active exam scores found in {analysis_grade}. Report forms are suppressed for students without marks.")
         else:
-            # HELPER FUNCTION TO FILL report.docx TEMPLATE
+            # HELPER FUNCTION TO POPULATE report.docx TEMPLATE
             def generate_student_docx_object(student_obj):
                 adm_str = student_obj["adm_no"]
                 student_name = student_obj["name"]
@@ -701,7 +696,6 @@ elif page == "Results Analysis":
                 else:
                     doc = Document()
                     doc.add_heading("KEA COMPREHENSIVE SCHOOL", level=1)
-                    doc.add_paragraph("OFFICIAL PUPIL ASSESSMENT REPORT FORM")
 
                 total_score = 0.0
                 top_sub, low_sub = "Mathematics", "English"
@@ -717,13 +711,14 @@ elif page == "Results Analysis":
                     "{{CLOSING_DATE}}": closing_date,
                 }
 
-                # Process Subject Tags safely
+                # Process Subject Tags
                 for sub in LEARNING_AREAS:
                     col_key = sub.lower().replace(" ", "_").replace(".", "").replace("(", "").replace(")", "")
                     val = s_row.get(col_key)
                     
                     s_tag = "{{" + f"{sub}_SCORE" + "}}"
                     g_tag = "{{" + f"{sub}_GRADE" + "}}"
+                    p_tag = "{{" + f"{sub}_PERFORMANCE" + "}}"
 
                     if val is not None and not pd.isna(val) and float(val) >= 1.0:
                         s_num = float(val)
@@ -733,9 +728,11 @@ elif page == "Results Analysis":
                         g_code, p_lvl, pts = get_subject_performance(s_num)
                         replacements[s_tag] = str(s_num)
                         replacements[g_tag] = g_code
+                        replacements[p_tag] = p_lvl
                     else:
                         replacements[s_tag] = "-"
                         replacements[g_tag] = "-"
+                        replacements[p_tag] = "-"
 
                 overall_g = calculate_total_grade(total_score)
                 teacher_comment = generate_teacher_comment(total_score, top_sub, low_sub)
@@ -744,13 +741,13 @@ elif page == "Results Analysis":
                 replacements["{{OVERALL_GRADE}}"] = overall_g
                 replacements["{{COMMENT}}"] = teacher_comment
 
-                # Replace in Paragraphs
+                # 1. Replace in Paragraphs
                 for p in doc.paragraphs:
                     for k, v in replacements.items():
                         if k in p.text:
                             p.text = p.text.replace(k, v)
 
-                # Replace in Tables
+                # 2. Replace in Tables (Maintains exact template layout)
                 for t in doc.tables:
                     for r in t.rows:
                         for cell in r.cells:
@@ -758,7 +755,7 @@ elif page == "Results Analysis":
                                 if k in cell.text:
                                     cell.text = cell.text.replace(k, v)
 
-                # Insert Official Stamp if present
+                # 3. Insert Stamp
                 if stamp_upload or os.path.exists("stamp.png"):
                     stamp_source = stamp_upload if stamp_upload else "stamp.png"
                     for p in doc.paragraphs:
@@ -773,7 +770,6 @@ elif page == "Results Analysis":
             # --- OPTION 1: LIVE PREVIEW & SINGLE REPORT DOWNLOAD ---
             st.subheader("1. Live Student Report Form Preview")
             
-            # Select active student (Ranked list)
             selected_student_obj = st.selectbox(
                 "Select Student for Live Report Form Preview", 
                 active_ranked_students, 
@@ -783,30 +779,36 @@ elif page == "Results Analysis":
             if selected_student_obj:
                 doc_obj = generate_student_docx_object(selected_student_obj)
                 
-                # Convert docx paragraphs & tables to HTML for Live Screen Rendering
-                st.markdown("#### 👁️ Live Report Form Document View")
-                preview_html = f"""
-                <div style="border: 2px solid #4B5563; padding: 25px; border-radius: 10px; background-color: #FFFFFF; color: #111827; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
-                    <div style="text-align: center; border-bottom: 2px solid #111827; padding-bottom: 10px; margin-bottom: 15px;">
-                        <h2 style="margin: 0; color: #1E3A8A;">KEA COMPREHENSIVE SCHOOL</h2>
-                        <h4 style="margin: 5px 0; color: #374151;">PUPIL ASSESSMENT REPORT FORM</h4>
-                        <p style="margin: 0; font-weight: bold;">{analysis_grade} | {term_val}</p>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 15px; font-size: 14px;">
-                        <div><strong>Student Name:</strong> {selected_student_obj['name']}<br><strong>Adm No:</strong> {selected_student_obj['adm_no']}</div>
-                        <div><strong>Class Rank:</strong> #{selected_student_obj['rank']}<br><strong>Overall Score:</strong> {selected_student_obj['total_marks']:.0f} ({calculate_total_grade(selected_student_obj['total_marks'])})</div>
-                    </div>
+                st.markdown("#### 👁️ Live Template Document View")
+                
+                # EXACT TEMPLATE CONVERTER: DOCX TO HTML PREVIEW
+                html_out = """
+                <div style="border: 1px solid #D1D5DB; padding: 30px; border-radius: 8px; background-color: #FFFFFF; color: #111827; font-family: Arial, sans-serif; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
                 """
                 
-                # Render Paragraph Content
+                # Render Paragraphs
                 for p in doc_obj.paragraphs:
                     if p.text.strip():
-                        preview_html += f"<p style='margin: 4px 0; font-size: 13px;'>{p.text}</p>"
+                        align = "center" if "KEA COMPREHENSIVE" in p.text or "REPORT FORM" in p.text else "left"
+                        weight = "bold" if "KEA COMPREHENSIVE" in p.text or "STUDENT" in p.text or "TOTAL" in p.text else "normal"
+                        html_out += f"<p style='text-align: {align}; font-weight: {weight}; margin: 6px 0; font-size: 13px;'>{p.text}</p>"
 
-                preview_html += "</div>"
-                st.components.v1.html(preview_html, height=420, scrolling=True)
+                # Render Tables Exactly as laid out in report.docx
+                for table in doc_obj.tables:
+                    html_out += "<table style='width:100%; border-collapse: collapse; margin: 15px 0; font-size: 12px; border: 1px solid #374151;'>"
+                    for i, row in enumerate(table.rows):
+                        bg_style = "background-color: #F3F4F6; font-weight: bold;" if i == 0 else ""
+                        html_out += f"<tr style='{bg_style}'>"
+                        for cell in row.cells:
+                            html_out += f"<td style='border: 1px solid #374151; padding: 6px 10px; text-align: left;'>{cell.text.strip()}</td>"
+                        html_out += "</tr>"
+                    html_out += "</table>"
 
-                # Download Button for the Single File
+                html_out += "</div>"
+                
+                st.components.v1.html(html_out, height=520, scrolling=True)
+
+                # Download Single Report
                 out_stream = io.BytesIO()
                 doc_obj.save(out_stream)
                 out_stream.seek(0)
@@ -821,9 +823,9 @@ elif page == "Results Analysis":
 
             st.markdown("---")
 
-            # --- OPTION 2: BATCH REPORT ZIP GENERATOR (RANK ORDERED, EXCLUDES BLANKS) ---
+            # --- OPTION 2: RANKED BATCH REPORT ZIP GENERATOR ---
             st.subheader("2. Ranked Batch Reports Generator (Entire Grade)")
-            st.caption(f"Generates report forms ordered from Rank #1 to Rank #{len(active_ranked_students)}. Students with zero marks are automatically excluded.")
+            st.caption(f"Generates report forms ordered from Rank #1 to Rank #{len(active_ranked_students)} using report.docx. Students without marks are excluded.")
 
             if st.button(f"📦 Generate All Ranked Reports for {analysis_grade} (.zip)", type="secondary"):
                 with st.spinner("Compiling ranked report forms... Please wait."):
@@ -837,7 +839,6 @@ elif page == "Results Analysis":
                             single_doc.save(doc_bytes)
                             doc_bytes.seek(0)
                             
-                            # Ranked filename structure
                             file_filename = f"Rank_{s_item['rank']:02d}_{s_item['adm_no']}_{s_item['name'].replace(' ', '_')}_Report.docx"
                             zip_file.writestr(file_filename, doc_bytes.getvalue())
 
@@ -849,7 +850,7 @@ elif page == "Results Analysis":
                         data=zip_buffer,
                         file_name=f"{analysis_grade.replace(' ', '_')}_Ranked_Assessment_Reports.zip",
                         mime="application/zip"
-        )
+            )                   
 
 # --- PAGE 5: FEE PAYMENT PORTAL (ADMIN ONLY) ---
 elif page == "Fee Payment":
