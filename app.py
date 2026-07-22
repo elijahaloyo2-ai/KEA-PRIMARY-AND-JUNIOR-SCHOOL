@@ -150,40 +150,55 @@ def generate_teacher_comment(total_marks, top_subject, low_subject):
         return f"Needs significant academic intervention and regular consultation with teachers. Particular attention required in {low_subject}."
 
 # --- PAGE 1: DASHBOARD ---
-if page == "Dashboard":
+elif page == "Dashboard":
     st.markdown("<h1 style='text-align: center;'>KEA COMPREHENSIVE SCHOOL</h1>", unsafe_allow_html=True)
     if os.path.exists("logo.png"):
         col_l1, col_l2, col_l3 = st.columns([1, 2, 1])
         with col_l2:
-            st.image("logo.png", width=200, use_column_width=True)
+            st.image("logo.png", width=200)
     st.markdown("<h4 style='text-align: center; color: #555;'>Primary (Grade 1-6) & Junior Secondary (Grade 7-9)</h4>", unsafe_allow_html=True)
     st.markdown("---")
 
-    # Fetch metrics from Supabase
-    try:
-        students_res = supabase.table("students").select("*", count="exact").execute()
-        teachers_res = supabase.table("teachers").select("*", count="exact").execute()
-        fees_res = supabase.table("fee_payments").select("amount_paid").execute()
-        
-        total_students = students_res.count if students_res.count is not None else len(students_res.data)
-        total_teachers = teachers_res.count if teachers_res.count is not None else len(teachers_res.data)
-        
-        total_collected = sum(item["amount_paid"] for item in fees_res.data) if fees_res.data else 0
-        expected_fee_per_student = 550
-        total_expected = total_students * expected_fee_per_student
-        deficit = max(0, total_expected - total_collected)
-    except Exception as e:
-        total_students, total_teachers, total_collected, deficit = 0, 0, 0, 0
+    # Safe variable initializations
+    total_students = 0
+    total_teachers = 0
+    total_collected = 0.0
+    expected_fee_per_student = 550.0
+    total_expected = 0.0
+    deficit = 0.0
+
+    # Fetch metrics safely from Supabase
+    if supabase:
+        try:
+            students_res = supabase.table("students").select("*", count="exact").execute()
+            teachers_res = supabase.table("teachers").select("*", count="exact").execute()
+            fees_res = supabase.table("fee_payments").select("amount_paid").execute()
+            
+            total_students = students_res.count if students_res.count is not None else len(students_res.data)
+            total_teachers = teachers_res.count if teachers_res.count is not None else len(teachers_res.data)
+            
+            if fees_res.data:
+                total_collected = sum(float(item.get("amount_paid", 0)) for item in fees_res.data)
+                
+            total_expected = total_students * expected_fee_per_student
+            deficit = max(0.0, total_expected - total_collected)
+        except Exception as e:
+            st.error(f"Error fetching dashboard metrics: {e}")
 
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total Students", total_students)
     col2.metric("Total Teachers", total_teachers)
-    col3.metric("Fee Collected (Ksh)", f"{total_collected:,}")
-    col4.metric("Fee Deficit (Ksh)", f"{deficit:,}", delta_color="inverse")
+    col3.metric("Fee Collected (Ksh)", f"{total_collected:,.2f}")
+    col4.metric("Fee Deficit (Ksh)", f"{deficit:,.2f}", delta_color="inverse")
 
     st.markdown("### Financial Track & Overview")
-    st.progress(min(1.0, total_collected / (total_expected if total_expected > 0 else 1)))
-    st.info(f"Financial Progress: Ksh {total_collected:,} collected out of expected Ksh {total_expected:,} total termly revenue.")
+    
+    # Calculate progress safely without division by zero
+    progress_val = (total_collected / total_expected) if total_expected > 0 else 0.0
+    progress_val = min(1.0, max(0.0, float(progress_val)))
+    
+    st.progress(progress_val)
+    st.info(f"Financial Progress: Ksh {total_collected:,.2f} collected out of expected Ksh {total_expected:,.2f} total termly revenue.")
 
 # --- PAGE 2: STUDENTS REGISTRATION ---
 elif page == "Students Registration":
