@@ -39,6 +39,63 @@ if "logged_in" not in st.session_state:
     st.session_state.role = ""
     st.session_state.full_name = ""
 
+# --- TEACHER SUBJECT & GRADE ASSIGNMENTS ---
+TEACHER_ASSIGNMENTS = {
+    "Eliars": {
+        "assignments": [
+            {"grade": "Grade 7", "subjects": ["ENGLISH", "PRETECHNICAL STUDIES"]},
+            {"grade": "Grade 8", "subjects": ["ENGLISH", "C.A.S"]},
+            {"grade": "Grade 9", "subjects": ["ENGLISH"]}
+        ]
+    },
+    "Lucas": {
+        "assignments": [
+            {"grade": "Grade 7", "subjects": ["INTEGRATED SCIENCE"]},
+            {"grade": "Grade 8", "subjects": ["INTEGRATED SCIENCE", "AGRICULTURE"]},
+            {"grade": "Grade 9", "subjects": ["AGRICULTURE"]} # Class Teacher Grade 9
+        ]
+    },
+    "Vincent": {
+        "assignments": [
+            {"grade": "Grade 7", "subjects": ["SOCIAL STUDIES"]},
+            {"grade": "Grade 8", "subjects": ["SOCIAL STUDIES", "KISWAHILI"]}, # Class Teacher Grade 8
+            {"grade": "Grade 9", "subjects": ["SOCIAL STUDIES", "KISWAHILI"]}
+        ]
+    },
+    "Grace": {
+        "assignments": [
+            {"grade": "Grade 7", "subjects": ["RELIGIOUS EDUCATION (C.R.E)", "AGRICULTURE"]}, # Class Teacher Grade 7
+            {"grade": "Grade 8", "subjects": ["RELIGIOUS EDUCATION (C.R.E)"]},
+            {"grade": "Grade 9", "subjects": ["INTEGRATED SCIENCE"]}
+        ]
+    },
+    "Elias": {
+        "assignments": [
+            {"grade": "Grade 7", "subjects": ["KISWAHILI"]}, # HOI
+            {"grade": "Grade 9", "subjects": ["RELIGIOUS EDUCATION (C.R.E)"]}
+        ]
+    },
+    "Valentine": {
+        "assignments": [
+            {"grade": "Grade 7", "subjects": ["MATHEMATICS"]},
+            {"grade": "Grade 9", "subjects": ["MATHEMATICS"]}
+        ]
+    },
+    "Elijah": {
+        "assignments": [
+            {"grade": "Grade 7", "subjects": ["C.A.S"]},
+            {"grade": "Grade 8", "subjects": ["MATHEMATICS", "PRETECHNICAL STUDIES"]},
+            {"grade": "Grade 9", "subjects": ["PRETECHNICAL STUDIES", "C.A.S"]}
+        ]
+    }
+}
+
+LEARNING_AREAS = [
+    "MATHEMATICS", "ENGLISH", "KISWAHILI", "INTEGRATED SCIENCE", 
+    "AGRICULTURE", "PRETECHNICAL STUDIES", "SOCIAL STUDIES", 
+    "RELIGIOUS EDUCATION (C.R.E)", "C.A.S"
+]
+
 # --- AUTHENTICATION & LOGIN SCREEN ---
 def login_screen():
     st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>KEA COMPREHENSIVE SCHOOL</h1>", unsafe_allow_html=True)
@@ -54,16 +111,14 @@ def login_screen():
         password = st.text_input("Password", type="password").strip()
         
         if st.button("Login", type="primary", use_container_width=True):
-            # 1. Developer Admin Account
             if username == "Admin" and password == "janabi@26!":
                 st.session_state.logged_in = True
                 st.session_state.username = "Admin"
-                st.session_state.role = "HOI"
+                st.session_state.role = "DEVELOPER"
                 st.session_state.full_name = "System Developer"
                 st.success("Welcome back, System Developer!")
                 st.rerun()
                 
-            # 2. Database Lookup for Registered Teachers
             elif supabase:
                 try:
                     res = supabase.table("teachers").select("*").ilike("username", username).execute()
@@ -91,6 +146,7 @@ if not st.session_state.logged_in:
 
 # --- ROLE & NAVIGATION SETUP ---
 role = st.session_state.role
+is_admin_role = role in ["HOI", "DHOI", "Senior teacher"]
 
 st.sidebar.markdown(f"**Logged in as:** {st.session_state.full_name}")
 st.sidebar.markdown(f"**Role:** {role}")
@@ -101,20 +157,33 @@ if st.sidebar.button("Logout"):
 st.sidebar.markdown("---")
 st.sidebar.markdown("### Navigation")
 
-nav_options = ["Dashboard", "Students Registration", "Marks Entry", "Results Analysis", "Fee Payment", "Teachers Portal", "Teacher Time Login", "Newsletter", "School Contact"]
-
-if role not in ["HOI", "DHOI", "Senior teacher"]:
-    nav_options = ["Dashboard", "Marks Entry", "Results Analysis", "Fee Payment", "Teachers Portal", "Teacher Time Login", "Newsletter", "School Contact"]
+# RESTRICT NAVIGATION FOR NON-ADMIN TEACHERS
+if is_admin_role:
+    nav_options = [
+        "Dashboard", 
+        "Students Registration", 
+        "Marks Entry", 
+        "Results Analysis", 
+        "Fee Payment", 
+        "Teachers Portal", 
+        "Teacher Time Login", 
+        "Newsletter", 
+        "School Contact"
+    ]
+else:
+    nav_options = [
+        "Dashboard", 
+        "Marks Entry", 
+        "Results Analysis", 
+        "Teachers Portal", 
+        "Teacher Time Login", 
+        "Newsletter", 
+        "School Contact"
+    ]
 
 page = st.sidebar.selectbox("Go to", nav_options)
 
 # --- HELPER LOGIC ---
-LEARNING_AREAS = [
-    "MATHEMATICS", "ENGLISH", "KISWAHILI", "INTEGRATED SCIENCE", 
-    "AGRICULTURE", "PRETECHNICAL STUDIES", "SOCIAL STUDIES", 
-    "RELIGIOUS EDUCATION (C.R.E)", "C.A.S"
-]
-
 def calculate_subject_grade(score):
     if score <= 10: return "BE2", 1
     elif score <= 20: return "BE1", 2
@@ -193,10 +262,13 @@ if page == "Dashboard":
     st.progress(progress_val)
     st.info(f"Financial Progress: Ksh {total_collected:,.2f} collected out of expected Ksh {total_expected:,.2f} total termly revenue.")
 
-# --- PAGE 2: STUDENTS REGISTRATION ---
+# --- PAGE 2: STUDENTS REGISTRATION (RESTRICTED TO ADMIN) ---
 elif page == "Students Registration":
+    if not is_admin_role:
+        st.error("Access Denied: Only HOI, DHOI, and Senior Teachers can register students.")
+        st.stop()
+        
     st.header("Students Registration Portal")
-    
     tab_manual, tab_excel = st.tabs(["Manual Registration", "Excel Spreadsheet Upload"])
     
     with tab_manual:
@@ -243,42 +315,36 @@ elif page == "Students Registration":
             except Exception as e:
                 st.error(f"Error processing excel file: {e}")
 
-# --- PAGE 3: MARKS ENTRY ---
+# --- PAGE 3: MARKS ENTRY (TAILORED TO LOGGED-IN TEACHER) ---
 elif page == "Marks Entry":
     st.header("Marks Entry Portal")
     
-    tab_excel_marks, tab_manual_marks = st.tabs(["Upload Excel Marks", "Manual Marks Entry"])
-    grades_list = [f"Grade {i}" for i in range(1, 10)]
-    target_grade = st.selectbox("Select Target Grade", grades_list)
+    user_key = st.session_state.username
+    teacher_data = TEACHER_ASSIGNMENTS.get(user_key)
     
-    with tab_excel_marks:
-        st.markdown("Upload Excel spreadsheet containing: **Adm No**, **Name**, and the 9 Learning Areas.")
-        marks_file = st.file_uploader("Upload Marks Excel", type=["xlsx", "xls"])
-        
-        if marks_file and st.button("Submit Excel Marks"):
-            try:
-                df = pd.read_excel(marks_file)
-                records = []
-                for _, row in df.iterrows():
-                    rec = {
-                        "adm_no": str(row["Adm No"]),
-                        "grade": target_grade,
-                    }
-                    total = 0
-                    for subject in LEARNING_AREAS:
-                        score = float(row.get(subject, 0))
-                        rec[subject.lower().replace(" ", "_")] = score
-                        total += score
-                    rec["total_marks"] = total
-                    records.append(rec)
-                
-                supabase.table("marks").upsert(records).execute()
-                st.success("Marks successfully submitted and linked to Results Analysis!")
-            except Exception as e:
-                st.error(f"Error uploading marks: {e}")
+    if is_admin_role or not teacher_data:
+        allowed_grades = [f"Grade {i}" for i in range(1, 10)]
+        teacher_grade_map = {g: LEARNING_AREAS for g in allowed_grades}
+        st.info("Log-in Mode: Administrator Mode (Full Access to All Grades & Subjects)")
+    else:
+        teacher_grade_map = {}
+        for item in teacher_data["assignments"]:
+            teacher_grade_map[item["grade"]] = item["subjects"]
+        allowed_grades = list(teacher_grade_map.keys())
+        st.info(f"Log-in Mode: Teacher Mode ({st.session_state.full_name}) - Viewing Assigned Classes & Subjects")
 
+    if not allowed_grades:
+        st.warning("No grades currently assigned to your profile.")
+        st.stop()
+
+    target_grade = st.selectbox("Select Assigned Grade", allowed_grades)
+    assigned_subjects = teacher_grade_map.get(target_grade, LEARNING_AREAS)
+    
+    st.markdown(f"**Assigned Learning Areas for {target_grade}:** {', '.join(assigned_subjects)}")
+
+    tab_manual_marks, tab_excel_marks = st.tabs(["Manual Marks Entry", "Upload Excel Marks"])
+    
     with tab_manual_marks:
-        st.markdown(f"### Manual Entry for {target_grade}")
         try:
             students_res = supabase.table("students").select("*").eq("grade", target_grade).execute()
             students = students_res.data
@@ -286,30 +352,75 @@ elif page == "Marks Entry":
             students = []
             
         if not students:
-            st.warning(f"No students registered under {target_grade}.")
+            st.warning(f"No registered students found in {target_grade}.")
         else:
             selected_student = st.selectbox("Select Student", students, format_func=lambda x: f"{x['adm_no']} - {x['name']}")
             if selected_student:
+                # Fetch existing marks if any
+                existing_marks = {}
+                try:
+                    m_res = supabase.table("marks").select("*").eq("adm_no", selected_student["adm_no"]).execute()
+                    if m_res.data:
+                        existing_marks = m_res.data[0]
+                except:
+                    pass
+
                 with st.form("manual_marks_form"):
-                    st.markdown(f"Entering marks out of 100% for **{selected_student['name']}**")
+                    st.markdown(f"Entering score out of **100%** for **{selected_student['name']}**")
                     scores = {}
-                    total_marks = 0
-                    for subject in LEARNING_AREAS:
-                        scores[subject] = st.number_input(f"{subject} (%)", min_value=0.0, max_value=100.0, value=0.0, step=0.5)
-                        total_marks += scores[subject]
+                    for subject in assigned_subjects:
+                        col_key = subject.lower().replace(" ", "_")
+                        default_val = float(existing_marks.get(col_key, 0.0)) if existing_marks else 0.0
+                        scores[subject] = st.number_input(f"{subject} (%)", min_value=0.0, max_value=100.0, value=default_val, step=0.5)
                     
-                    submitted = st.form_submit_button("Submit Student Marks")
+                    submitted = st.form_submit_button("Submit Marks")
                     if submitted:
-                        payload = {
+                        payload = existing_marks if existing_marks else {
                             "adm_no": selected_student["adm_no"],
-                            "grade": target_grade,
-                            "total_marks": total_marks
+                            "grade": target_grade
                         }
-                        for subject in LEARNING_AREAS:
-                            payload[subject.lower().replace(" ", "_")] = scores[subject]
+                        for subject, score in scores.items():
+                            payload[subject.lower().replace(" ", "_")] = score
+                            
+                        # Recalculate total marks across all 9 subjects
+                        total_score = sum(float(payload.get(sub.lower().replace(" ", "_"), 0)) for sub in LEARNING_AREAS)
+                        payload["total_marks"] = total_score
                         
                         supabase.table("marks").upsert(payload, on_conflict="adm_no").execute()
-                        st.success(f"Marks successfully submitted for {selected_student['name']}!")
+                        st.success(f"Marks updated for {selected_student['name']}!")
+
+    with tab_excel_marks:
+        st.markdown(f"Upload Excel for **{target_grade}**. Excel headers must match subject names.")
+        marks_file = st.file_uploader("Upload Marks Excel", type=["xlsx", "xls"])
+        
+        if marks_file and st.button("Submit Excel Marks"):
+            try:
+                df = pd.read_excel(marks_file)
+                records = []
+                for _, row in df.iterrows():
+                    adm = str(row["Adm No"])
+                    # Fetch existing record to retain marks in unassigned subjects
+                    existing = {}
+                    try:
+                        ex_res = supabase.table("marks").select("*").eq("adm_no", adm).execute()
+                        if ex_res.data:
+                            existing = ex_res.data[0]
+                    except:
+                        pass
+
+                    rec = existing if existing else {"adm_no": adm, "grade": target_grade}
+                    for subject in assigned_subjects:
+                        if subject in row:
+                            rec[subject.lower().replace(" ", "_")] = float(row[subject])
+                    
+                    # Recalculate Total
+                    rec["total_marks"] = sum(float(rec.get(sub.lower().replace(" ", "_"), 0)) for sub in LEARNING_AREAS)
+                    records.append(rec)
+                
+                supabase.table("marks").upsert(records, on_conflict="adm_no").execute()
+                st.success("Marks successfully uploaded and updated!")
+            except Exception as e:
+                st.error(f"Error processing marks excel: {e}")
 
 # --- PAGE 4: RESULTS ANALYSIS ---
 elif page == "Results Analysis":
@@ -414,10 +525,13 @@ elif page == "Results Analysis":
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 )
 
-# --- PAGE 5: FEE PAYMENT PORTAL ---
+# --- PAGE 5: FEE PAYMENT PORTAL (ADMIN ONLY) ---
 elif page == "Fee Payment":
+    if not is_admin_role:
+        st.error("Access Denied: Only HOI, DHOI, and Senior Teachers have access to Financial Records.")
+        st.stop()
+        
     st.header("Fee Payment & Financial Portal")
-    
     tab_fee_struct, tab_make_pay, tab_history, tab_balances = st.tabs(["Fee Structure", "Make Payment", "Receipt & History", "Termly Balances"])
     
     with tab_fee_struct:
@@ -474,12 +588,6 @@ elif page == "Fee Payment":
 
     with tab_balances:
         st.markdown("### Termly Balances Status")
-        st.markdown("""
-        * 🟢 **Green (Nil Balance):** Paid exactly Ksh 550 (or required amount)
-        * 🔴 **Red (Pending Balance):** Paid less than Ksh 550
-        * 🔵 **Blue (Overpayment):** Paid more than Ksh 550
-        """)
-        
         try:
             st_res = supabase.table("students").select("*").execute()
             pay_res = supabase.table("fee_payments").select("*").execute()
@@ -588,9 +696,7 @@ elif page == "Teacher Time Login":
 elif page == "Newsletter":
     st.header("School Newsletter & Upcoming Events")
     
-    is_admin = role in ["HOI", "DHOI", "Senior teacher"]
-    
-    if is_admin:
+    if is_admin_role:
         with st.form("newsletter_form"):
             news_title = st.text_input("Newsletter Title")
             news_content = st.text_area("News Content & Announcements")
@@ -622,9 +728,7 @@ elif page == "Newsletter":
 elif page == "School Contact":
     st.header("School Contact & Location Information")
     
-    is_admin = role in ["HOI", "DHOI", "Senior teacher"]
-    
-    if is_admin:
+    if is_admin_role:
         with st.form("contact_form"):
             address = st.text_input("Physical Address", "Migori County, Kenya")
             phone = st.text_input("School Contact Number", "+254 700 000 000")
