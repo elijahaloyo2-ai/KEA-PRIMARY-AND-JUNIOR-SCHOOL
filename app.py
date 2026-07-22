@@ -1,4 +1,4 @@
-import streamlit as st
+ import streamlit as st
 import pandas as pd
 from supabase import create_client, Client
 from datetime import datetime
@@ -39,7 +39,7 @@ if "logged_in" not in st.session_state:
     st.session_state.role = ""
     st.session_state.full_name = ""
 
- # --- AUTHENTICATION & LOGIN SCREEN ---
+# --- AUTHENTICATION & LOGIN SCREEN ---
 def login_screen():
     st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>KEA COMPREHENSIVE SCHOOL</h1>", unsafe_allow_html=True)
     st.markdown("<h3 style='text-align: center; color: #4B5563;'>School Management & Information System</h3>", unsafe_allow_html=True)
@@ -47,18 +47,18 @@ def login_screen():
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         if os.path.exists("logo.png"):
-            st.image("logo.png", width=150, use_column_width=True)
+            st.image("logo.png", width=150)
         
         st.markdown("### Please Login to Continue")
         username = st.text_input("Username").strip()
         password = st.text_input("Password", type="password").strip()
         
         if st.button("Login", type="primary", use_container_width=True):
-            # 1. Developer Admin Account (Hardcoded Access)
+            # 1. Developer Admin Account
             if username == "Admin" and password == "janabi@26!":
                 st.session_state.logged_in = True
                 st.session_state.username = "Admin"
-                st.session_state.role = "HOI"  # Gives full administrative access across all pages
+                st.session_state.role = "HOI"
                 st.session_state.full_name = "System Developer"
                 st.success("Welcome back, System Developer!")
                 st.rerun()
@@ -66,11 +66,9 @@ def login_screen():
             # 2. Database Lookup for Registered Teachers
             elif supabase:
                 try:
-                    # Query Supabase teachers table
                     res = supabase.table("teachers").select("*").ilike("username", username).execute()
                     if res.data:
                         user = res.data[0]
-                        # Verify against teacher default password or stored password
                         if password == "kea@26" or password == user.get("password"):
                             st.session_state.logged_in = True
                             st.session_state.username = user["username"]
@@ -93,7 +91,6 @@ if not st.session_state.logged_in:
 
 # --- ROLE & NAVIGATION SETUP ---
 role = st.session_state.role
-admin_roles = ["HOI", "DHOI", "Senior teacher", "Teacher"] # Admins get full access based on requirements
 
 st.sidebar.markdown(f"**Logged in as:** {st.session_state.full_name}")
 st.sidebar.markdown(f"**Role:** {role}")
@@ -111,7 +108,7 @@ if role not in ["HOI", "DHOI", "Senior teacher"]:
 
 page = st.sidebar.selectbox("Go to", nav_options)
 
-# --- HELPER: GRADING & CBC LOGIC ---
+# --- HELPER LOGIC ---
 LEARNING_AREAS = [
     "MATHEMATICS", "ENGLISH", "KISWAHILI", "INTEGRATED SCIENCE", 
     "AGRICULTURE", "PRETECHNICAL STUDIES", "SOCIAL STUDIES", 
@@ -150,7 +147,7 @@ def generate_teacher_comment(total_marks, top_subject, low_subject):
         return f"Needs significant academic intervention and regular consultation with teachers. Particular attention required in {low_subject}."
 
 # --- PAGE 1: DASHBOARD ---
-elif page == "Dashboard":
+if page == "Dashboard":
     st.markdown("<h1 style='text-align: center;'>KEA COMPREHENSIVE SCHOOL</h1>", unsafe_allow_html=True)
     if os.path.exists("logo.png"):
         col_l1, col_l2, col_l3 = st.columns([1, 2, 1])
@@ -159,7 +156,6 @@ elif page == "Dashboard":
     st.markdown("<h4 style='text-align: center; color: #555;'>Primary (Grade 1-6) & Junior Secondary (Grade 7-9)</h4>", unsafe_allow_html=True)
     st.markdown("---")
 
-    # Safe variable initializations
     total_students = 0
     total_teachers = 0
     total_collected = 0.0
@@ -167,7 +163,6 @@ elif page == "Dashboard":
     total_expected = 0.0
     deficit = 0.0
 
-    # Fetch metrics safely from Supabase
     if supabase:
         try:
             students_res = supabase.table("students").select("*", count="exact").execute()
@@ -192,8 +187,6 @@ elif page == "Dashboard":
     col4.metric("Fee Deficit (Ksh)", f"{deficit:,.2f}", delta_color="inverse")
 
     st.markdown("### Financial Track & Overview")
-    
-    # Calculate progress safely without division by zero
     progress_val = (total_collected / total_expected) if total_expected > 0 else 0.0
     progress_val = min(1.0, max(0.0, float(progress_val)))
     
@@ -254,11 +247,7 @@ elif page == "Students Registration":
 elif page == "Marks Entry":
     st.header("Marks Entry Portal")
     
-    # Check teacher assignment restrictions if logged in as teacher
-    user_name = st.session_state.full_name
-    
     tab_excel_marks, tab_manual_marks = st.tabs(["Upload Excel Marks", "Manual Marks Entry"])
-    
     grades_list = [f"Grade {i}" for i in range(1, 10)]
     target_grade = st.selectbox("Select Target Grade", grades_list)
     
@@ -378,7 +367,6 @@ elif page == "Results Analysis":
             selected_adm = st.selectbox("Select Student for Individual Report", student_options, format_func=lambda x: f"{x[0]} - {x[1]}")
             
             if st.button("Generate & Download Single Report (.docx)"):
-                # Generate docx
                 doc = Document()
                 doc.add_heading("KEA COMPREHENSIVE SCHOOL", level=1)
                 doc.add_paragraph("OFFICIAL PUPIL ASSESSMENT REPORT FORM")
@@ -597,7 +585,7 @@ elif page == "Teacher Time Login":
         st.info("No attendance logs found.")
 
 # --- PAGE 8: NEWSLETTER ---
-elif page == "Newsletter & Events":
+elif page == "Newsletter":
     st.header("School Newsletter & Upcoming Events")
     
     is_admin = role in ["HOI", "DHOI", "Senior teacher"]
