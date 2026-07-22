@@ -696,22 +696,25 @@ elif page == "Results Analysis":
                     "{{CLOSING_DATE}}": closing_date,
                 }
 
-                # Process Subject Tags
+                # Process Subject Tags safely without f-string formatting errors
                 for sub in LEARNING_AREAS:
                     col_key = sub.lower().replace(" ", "_").replace(".", "").replace("(", "").replace(")", "")
                     val = student_marks_row.get(col_key)
                     
+                    s_tag = "{{" + f"{sub}_SCORE" + "}}"
+                    g_tag = "{{" + f"{sub}_GRADE" + "}}"
+
                     if val is not None and not pd.isna(val) and float(val) >= 1.0:
                         s_num = float(val)
                         total_score += s_num
                         if s_num > best_s: best_s = s_num; top_sub = sub
                         if s_num < worst_s: worst_s = s_num; low_sub = sub
                         g_code, p_lvl, pts = get_subject_performance(s_num)
-                        replacements[f"{{{{{sub}_SCORE}}}}}"] = str(s_num)
-                        replacements[f"{{{{{sub}_GRADE}}}}}"] = g_code
+                        replacements[s_tag] = str(s_num)
+                        replacements[g_tag] = g_code
                     else:
-                        replacements[f"{{{{{sub}_SCORE}}}}}"] = "-"
-                        replacements[f"{{{{{sub}_GRADE}}}}}"] = "-"
+                        replacements[s_tag] = "-"
+                        replacements[g_tag] = "-"
 
                 overall_g = calculate_total_grade(total_score)
                 teacher_comment = generate_teacher_comment(total_score, top_sub, low_sub)
@@ -799,7 +802,7 @@ elif page == "Results Analysis":
                         data=zip_buffer,
                         file_name=f"{analysis_grade.replace(' ', '_')}_Assessment_Reports.zip",
                         mime="application/zip"
-            )
+            )                                   
 
 # --- PAGE 5: FEE PAYMENT PORTAL (ADMIN ONLY) ---
 elif page == "Fee Payment":
