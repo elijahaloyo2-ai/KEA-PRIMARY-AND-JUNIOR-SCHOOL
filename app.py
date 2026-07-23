@@ -98,8 +98,8 @@ LEARNING_AREAS = [
 
 # --- SUBJECT TO POSTGRESQL COLUMN MAPPING HELPER ---
 SUBJECT_COLUMN_MAP = {
-    "C.A.S": "creative_arts",
-    "RELIGIOUS EDUCATION (C.R.E)": "cre",
+    "C.A.S": "c.a.s",
+    "RELIGIOUS EDUCATION (C.R.E)": "religious education (c r.e)",
     "C.R.E": "cre",
     "PRETECHNICAL STUDIES": "pretechnical_studies",
     "INTEGRATED SCIENCE": "integrated_science",
