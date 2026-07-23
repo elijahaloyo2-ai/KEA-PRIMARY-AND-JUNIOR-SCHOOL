@@ -44,7 +44,7 @@ TEACHER_ASSIGNMENTS = {
     "Eliars": {
         "assignments": [
             {"grade": "Grade 7", "subjects": ["ENGLISH", "PRETECHNICAL STUDIES"]},
-            {"grade": "Grade 8", "subjects": ["ENGLISH", "C.A.S"]},
+            {"grade": "Grade 8", "subjects": ["ENGLISH", "CREATIVE ARTS SPORTS"]},
             {"grade": "Grade 9", "subjects": ["ENGLISH"]}
         ]
     },
@@ -64,15 +64,15 @@ TEACHER_ASSIGNMENTS = {
     },
     "Grace": {
         "assignments": [
-            {"grade": "Grade 7", "subjects": ["RELIGIOUS EDUCATION (C.R.E)", "AGRICULTURE"]}, # Class Teacher Grade 7
-            {"grade": "Grade 8", "subjects": ["RELIGIOUS EDUCATION (C.R.E)"]},
+            {"grade": "Grade 7", "subjects": ["CHRISTIAN RELIGIOUS EDUCATION", "AGRICULTURE"]}, # Class Teacher Grade 7
+            {"grade": "Grade 8", "subjects": ["CHRISTIAN RELIGIOUS EDUCATION"]},
             {"grade": "Grade 9", "subjects": ["INTEGRATED SCIENCE"]}
         ]
     },
     "Elias": {
         "assignments": [
             {"grade": "Grade 7", "subjects": ["KISWAHILI"]}, # HOI
-            {"grade": "Grade 9", "subjects": ["RELIGIOUS EDUCATION (C.R.E)"]}
+            {"grade": "Grade 9", "subjects": ["CHRISTIAN RELIGIOUS EDUCATION"]}
         ]
     },
     "Valentine": {
@@ -83,9 +83,9 @@ TEACHER_ASSIGNMENTS = {
     },
     "Elijah": {
         "assignments": [
-            {"grade": "Grade 7", "subjects": ["C.A.S"]},
+            {"grade": "Grade 7", "subjects": ["CREATIVE ARTS SPORTS"]},
             {"grade": "Grade 8", "subjects": ["MATHEMATICS", "PRETECHNICAL STUDIES"]},
-            {"grade": "Grade 9", "subjects": ["PRETECHNICAL STUDIES", "C.A.S"]}
+            {"grade": "Grade 9", "subjects": ["PRETECHNICAL STUDIES", "CREATIVE ARTS SPORTS"]}
         ]
     }
 }
@@ -93,14 +93,13 @@ TEACHER_ASSIGNMENTS = {
 LEARNING_AREAS = [
     "MATHEMATICS", "ENGLISH", "KISWAHILI", "INTEGRATED SCIENCE", 
     "AGRICULTURE", "PRETECHNICAL STUDIES", "SOCIAL STUDIES", 
-    "RELIGIOUS EDUCATION (C.R.E)", "C.A.S"
+    "CHRISTIAN RELIGIOUS EDUCATION", "CREATIVE ARTS SPORTS"
 ]
 
 # --- SUBJECT TO POSTGRESQL COLUMN MAPPING HELPER ---
 SUBJECT_COLUMN_MAP = {
-    "C.A.S": "c.a.s",
-    "RELIGIOUS EDUCATION (C.R.E)": "religious education (c r.e)",
-    "C.R.E": "cre",
+    "CREATIVE ARTS SPORTS": "creative_arts_sports",
+    "CHRISTIAN RELIGIOUS EDUCATION": "christian_religious_education",
     "PRETECHNICAL STUDIES": "pretechnical_studies",
     "INTEGRATED SCIENCE": "integrated_science",
     "SOCIAL STUDIES": "social_studies"
