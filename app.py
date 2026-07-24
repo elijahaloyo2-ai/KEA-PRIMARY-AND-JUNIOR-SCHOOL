@@ -192,8 +192,6 @@ else:
     nav_options = [
         "Dashboard", 
         "Marks Entry", 
-        "Results Analysis", 
-        "Teachers Portal", 
         "Newsletter", 
         "School Contact"
     ]
