@@ -1036,8 +1036,8 @@ elif page == "Fee Payment":
     with tab_fee_struct:
         st.markdown("### KEA Comprehensive School Fee Structure")
         st.info("""
-        * **Continuing Students:** Ksh 550 per term (Tuition: Ksh 150 [50/month], Exams: Ksh 400 [200 Mid Term, 200 End Term]). Total Annual = Ksh 1,650.
-        * **Newly Admitted Students:** Pay an extra Ksh 200 admission fee in Term 1 (Total Term 1 = Ksh 750). Terms 2 & 3 revert to standard Ksh 550.
+        * **Continuing Students:** Ksh 350 per term (Tuition: Ksh 150 [50/month], Exams: Ksh 200 [100 Mid Term, 100 End Term]). Total Annual = Ksh 1,050.
+        * **Newly Admitted Students:** Pay an extra Ksh 200 admission fee in Term 1 (Total Term 1 = Ksh 550). Terms 2 & 3 revert to standard Ksh 350.
         """)
         
     with tab_make_pay:
