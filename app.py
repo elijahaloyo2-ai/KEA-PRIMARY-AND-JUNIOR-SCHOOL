@@ -41,18 +41,17 @@ if "logged_in" not in st.session_state:
 
 # --- TEACHER SUBJECT & GRADE ASSIGNMENTS ---
 TEACHER_ASSIGNMENTS = {
-    "Eliars": {
+    "Opondo": {
         "assignments": [
             {"grade": "Grade 7", "subjects": ["ENGLISH", "PRETECHNICAL STUDIES"]},
-            {"grade": "Grade 8", "subjects": ["ENGLISH", "CREATIVE ARTS SPORTS"]},
+            {"grade": "Grade 8", "subjects": ["ENGLISH"]},
             {"grade": "Grade 9", "subjects": ["ENGLISH"]}
         ]
     },
     "Lucas": {
         "assignments": [
-            {"grade": "Grade 7", "subjects": ["INTEGRATED SCIENCE"]},
             {"grade": "Grade 8", "subjects": ["INTEGRATED SCIENCE", "AGRICULTURE"]},
-            {"grade": "Grade 9", "subjects": ["AGRICULTURE"]} # Class Teacher Grade 9
+            {"grade": "Grade 9", "subjects": ["MATHEMATICS", "AGRICULTURE"]} # Class Teacher Grade 9
         ]
     },
     "Vincent": {
@@ -64,21 +63,24 @@ TEACHER_ASSIGNMENTS = {
     },
     "Grace": {
         "assignments": [
-            {"grade": "Grade 7", "subjects": ["CHRISTIAN RELIGIOUS EDUCATION", "AGRICULTURE"]}, # Class Teacher Grade 7
-            {"grade": "Grade 8", "subjects": ["CHRISTIAN RELIGIOUS EDUCATION"]},
+            {"grade": "Grade 7", "subjects": ["MATHEMATICS", "AGRICULTURE"]}, # Class Teacher Grade 7
             {"grade": "Grade 9", "subjects": ["INTEGRATED SCIENCE"]}
         ]
     },
-    "Elias": {
+    "Achiyo": {
         "assignments": [
-            {"grade": "Grade 7", "subjects": ["KISWAHILI"]}, # HOI
-            {"grade": "Grade 9", "subjects": ["CHRISTIAN RELIGIOUS EDUCATION"]}
+           {"grade": "Grade 9", "subjects": ["CHRISTIAN RELIGIOUS EDUCATION"]}
         ]
     },
-    "Valentine": {
+    "Balla":{
+        "assignments":[
+            {"grade": "Grade 8", "subjects"; ["CREATIVE ARTS SPORTS"]}
+        ]
+    },
+    "Faith": {
         "assignments": [
-            {"grade": "Grade 7", "subjects": ["MATHEMATICS"]},
-            {"grade": "Grade 9", "subjects": ["MATHEMATICS"]}
+            {"grade": "Grade 7", "subjects": ["INTEGRATED SCIENCE", "KISWAHILI]},
+            {"grade": "Grade 8", "subjects": ["CHRISTIAN RELIGIOUS EDUCATION"]}
         ]
     },
     "Elijah": {
@@ -86,6 +88,7 @@ TEACHER_ASSIGNMENTS = {
             {"grade": "Grade 7", "subjects": ["CREATIVE ARTS SPORTS"]},
             {"grade": "Grade 8", "subjects": ["MATHEMATICS", "PRETECHNICAL STUDIES"]},
             {"grade": "Grade 9", "subjects": ["PRETECHNICAL STUDIES", "CREATIVE ARTS SPORTS"]}
+            
         ]
     }
 }
@@ -247,7 +250,7 @@ if page == "Dashboard":
     total_students = 0
     total_teachers = 0
     total_collected = 0.0
-    expected_fee_per_student = 550.0
+    expected_fee_per_student = 500.0
     total_expected = 0.0
     deficit = 0.0
 
@@ -1070,8 +1073,8 @@ elif page == "Fee Payment":
     with tab_fee_struct:
         st.markdown("### KEA Comprehensive School Fee Structure")
         st.info("""
-        * **Continuing Students:** Ksh 350 per term (Tuition: Ksh 150 [50/month], Exams: Ksh 200 [100 Mid Term, 100 End Term]). Total Annual = Ksh 1,050.
-        * **Newly Admitted Students:** Pay an extra Ksh 200 admission fee in Term 1 (Total Term 1 = Ksh 550). Terms 2 & 3 revert to standard Ksh 350.
+        * **Continuing Students:** Ksh 300 per term (Tuition: Ksh 100 [50/month], Exams: Ksh 200 [100 Mid Term, 100 End Term]). Total Annual = Ksh 900
+        * **Newly Admitted Students:** Pay an extra Ksh 200 admission fee in Term 1 (Total Term 1 = Ksh 500). Terms 2 & 3 revert to standard Ksh 300.
         """)
         
     with tab_make_pay:
