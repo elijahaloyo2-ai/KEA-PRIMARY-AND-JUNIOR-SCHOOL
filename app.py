@@ -321,16 +321,50 @@ elif page == "Students Registration":
         if uploaded_file and st.button("Process & Admit Students"):
             try:
                 df = pd.read_excel(uploaded_file)
+                
+                # Standardize column headers (case-insensitive & whitespace trimmed)
+                df.columns = [str(c).strip().lower() for c in df.columns]
+                
+                # Identify admission number column
+                adm_col = next((c for c in df.columns if "adm" in c), None)
+                name_col = next((c for c in df.columns if "name" in c), None)
+                assess_col = next((c for c in df.columns if "assess" in c), None)
+                grade_col = next((c for c in df.columns if "grade" in c), None)
+                
+                if not adm_col or not name_col:
+                    st.error("Excel file must contain at least 'Adm No' and 'Name' columns.")
+                    st.stop()
+
                 records = []
                 for _, row in df.iterrows():
-                    records.append({
-                        "adm_no": str(row.get("Adm No")),
-                        "assessment_no": str(row.get("Assessment No", "")),
-                        "name": str(row.get("Name")),
-                        "grade": str(row.get("Grade", selected_grade_bulk))
-                    })
-                supabase.table("students").upsert(records).execute()
-                st.success(f"Successfully uploaded and admitted {len(records)} students!")
+                    adm_val = str(row[adm_col]).strip() if pd.notna(row[adm_col]) else None
+                    name_val = str(row[name_col]).strip() if pd.notna(row[name_col]) else None
+                    assess_val = str(row[assess_col]).strip() if assess_col and pd.notna(row[assess_col]) else ""
+                    grade_val = str(row[grade_col]).strip() if grade_col and pd.notna(row[grade_col]) else selected_grade_bulk
+                    
+                    if adm_val and adm_val.lower() != "nan" and name_val and name_val.lower() != "nan":
+                        records.append({
+                            "adm_no": adm_val,
+                            "assessment_no": assess_val,
+                            "name": name_val,
+                            "grade": grade_val
+                        })
+
+                if not records:
+                    st.warning("No valid student records found in the uploaded file.")
+                else:
+                    # Fix SQL 21000: Deduplicate records by 'adm_no' keeping the last occurrence
+                    unique_records_dict = {r["adm_no"]: r for r in records}
+                    deduplicated_records = list(unique_records_dict.values())
+                    
+                    duplicates_removed = len(records) - len(deduplicated_records)
+                    if duplicates_removed > 0:
+                        st.info(f"Removed {duplicates_removed} duplicate admission number entry/entries from batch.")
+
+                    # Upsert cleaned unique dataset
+                    supabase.table("students").upsert(deduplicated_records, on_conflict="adm_no").execute()
+                    st.success(f"Successfully uploaded and admitted {len(deduplicated_records)} students!")
+
             except Exception as e:
                 st.error(f"Error processing excel file: {e}")
 
