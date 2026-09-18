@@ -79,7 +79,7 @@ TEACHER_ASSIGNMENTS = {
     },
     "Faith": {
         "assignments": [
-            {"grade": "Grade 7", "subjects": ["INTEGRATED SCIENCE", "KISWAHILI]},
+            {"grade": "Grade 7", "subjects": ["INTEGRATED SCIENCE", "KISWAHILI"]},
             {"grade": "Grade 8", "subjects": ["CHRISTIAN RELIGIOUS EDUCATION"]}
         ]
     },
