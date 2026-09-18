@@ -1136,7 +1136,7 @@ elif page == "Fee Payment":
             balance_rows = []
             for s in st_res.data:
                 paid = student_paid.get(s["adm_no"], 0)
-                required = 550
+                required = 300
                 diff = paid - required
                 if diff == 0:
                     status = "🟢 Nil Balance"
