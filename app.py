@@ -74,7 +74,7 @@ TEACHER_ASSIGNMENTS = {
     },
     "Balla":{
         "assignments":[
-            {"grade": "Grade 8", "subjects"; ["CREATIVE ARTS SPORTS"]}
+            {"grade": "Grade 8", "subjects": ["CREATIVE ARTS SPORTS"]}
         ]
     },
     "Faith": {
