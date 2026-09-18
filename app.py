@@ -250,7 +250,7 @@ if page == "Dashboard":
     total_students = 0
     total_teachers = 0
     total_collected = 0.0
-    expected_fee_per_student = 500.0
+    expected_fee_per_student = 300.0
     total_expected = 0.0
     deficit = 0.0
 
