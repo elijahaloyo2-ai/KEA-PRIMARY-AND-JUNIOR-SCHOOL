@@ -168,7 +168,7 @@ def login_screen():
         password = st.text_input("Password", type="password").strip()
         
         if st.button("Login", type="primary", use_container_width=True):
-            if username == "Admin" and password == "janabi@26!":
+            if username == "Admin" and password == "janabieli@26!":
                 st.session_state.logged_in = True
                 st.session_state.username = "Admin"
                 st.session_state.role = "DEVELOPER"
