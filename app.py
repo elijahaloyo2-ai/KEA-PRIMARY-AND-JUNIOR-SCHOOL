@@ -868,14 +868,14 @@ elif page == "Results Analysis":
                     section.left_margin = Inches(0.4)
                     section.right_margin = Inches(0.4)
 
-                # 1. Insert School Logo at top right of document if available
+                # 1. Insert School Logo at top left of document if available
                 if os.path.exists("logo.png"):
                     p_logo = doc.paragraphs[0] if doc.paragraphs else doc.add_paragraph()
-                    p_logo.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                    p_logo.alignment = WD_ALIGN_PARAGRAPH.LEFT
                     p_logo.paragraph_format.space_before = Pt(0)
-                    p_logo.paragraph_format.space_after = Pt(4)
+                    p_logo.paragraph_format.space_after = Pt(0)
                     run_logo = p_logo.add_run()
-                    run_logo.add_picture("logo.png", width=Inches(0.9))
+                    run_logo.add_picture("logo.png", width=Inches(0.95))
 
                 total_score = 0.0
                 top_sub, low_sub = "Mathematics", "English"
