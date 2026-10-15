@@ -1679,7 +1679,7 @@ elif page == "School Contact":
                     st.error(f"Error updating contact: {e}")
     
     st.markdown("### Contact Details")
-    st.markdown("**Physical Address:** Migori County, Kenya")
-    st.markdown("**Phone:** +254 700 000 000")
-    st.markdown("**Email:** info@keacomprehensiveschool.ac.ke")
+    st.markdown("**Physical Address:** Kaler ward, Nyatike South, Migori County, Kenya")
+    st.markdown("**Phone:** +254 726 502 706")
+    st.markdown("**Email:** keacomprehensive@gmail.com")
     st.markdown("[View Location on Google Maps](https://maps.google.com)")
