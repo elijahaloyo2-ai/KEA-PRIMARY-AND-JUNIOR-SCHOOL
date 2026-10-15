@@ -357,7 +357,7 @@ if page == "Dashboard":
     with b_col1:
         st.markdown(f"""
             <div class="banner-card">
-                <h3>🎓 KEA COMPREHENSIVE SCHOOL — EduAdmin Dashboard</h3>
+                <h3>🎓 KEA COMPREHENSIVE SCHOOL — User Dashboard</h3>
                 <p>Welcome back, <b>{st.session_state.full_name}</b> ({st.session_state.role})! Access termly results analysis, registered student rosters, fee payments, and teaching schedules seamlessly.</p>
             </div>
         """, unsafe_allow_html=True)
@@ -365,7 +365,7 @@ if page == "Dashboard":
         st.markdown("""
             <div class="support-card">
                 <h4 style="margin:0;">📞 School Support</h4>
-                <p style="margin:5px 0 0 0; font-size:16px; font-weight:bold;">+254 700 000 000</p>
+                <p style="margin:5px 0 0 0; font-size:16px; font-weight:bold;">+254 769 719 749</p>
                 <small>Migori County, Kenya</small>
             </div>
         """, unsafe_allow_html=True)
