@@ -314,7 +314,6 @@ if page == "Dashboard":
                 background-color: #1E293B;
                 border-radius: 10px;
                 padding: 15px;
-                color: white;
                 border: 1px solid #334155;
                 margin-bottom: 10px;
             }
@@ -472,7 +471,6 @@ if page == "Dashboard":
         else:
             st.markdown("### 📋 Your Assigned Learning Areas & Grades")
             
-            # Display assignment chips/cards
             cols = st.columns(min(len(assignments), 3))
             for idx, item in enumerate(assignments):
                 with cols[idx % len(cols)]:
@@ -487,11 +485,9 @@ if page == "Dashboard":
             st.markdown("### 📈 Learning Area Submission & Performance Analytics")
             st.caption("Real-time metrics and breakdown of student score submissions for your assigned subjects.")
 
-            # Calculate submission statistics for teacher's subjects across grades
             analytics_data = []
             
             try:
-                # Fetch all students and all marks from database
                 students_res = supabase.table("students").select("adm_no, grade").execute()
                 all_students = students_res.data if students_res.data else []
                 
@@ -536,7 +532,6 @@ if page == "Dashboard":
                 if analytics_data:
                     df_analytics = pd.DataFrame(analytics_data)
 
-                    # Summary Metrics Row
                     tot_enrolled = sum(d["Enrolled"] for d in analytics_data)
                     tot_submitted = sum(d["Submitted"] for d in analytics_data)
                     tot_pending = sum(d["Pending"] for d in analytics_data)
@@ -548,13 +543,11 @@ if page == "Dashboard":
                     tm3.metric("Pending Submissions", tot_pending, delta_color="inverse")
                     tm4.metric("Average Subject Mean", f"{round(overall_avg, 1)}%")
 
-                    st.markdown("<br>", st.markdown if False else None)
+                    st.markdown("<br>", unsafe_allow_html=True)
 
-                    # Detailed Analytics Table
                     st.markdown("#### 📋 Subject Submissions Breakdown Table")
                     st.dataframe(df_analytics, use_container_width=True, hide_index=True)
 
-                    # Visual Charts & Graphs
                     st.markdown("#### 📊 Visual Performance & Submission Graphs")
                     
                     chart_col1, chart_col2 = st.columns(2)
