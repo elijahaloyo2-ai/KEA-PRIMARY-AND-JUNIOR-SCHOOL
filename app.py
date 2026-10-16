@@ -344,7 +344,7 @@ if page == "Dashboard":
     with b_col1:
         st.markdown(f"""
             <div class="banner-card">
-                <h3>🎓 KEA COMPREHENSIVE SCHOOL — EduAdmin Dashboard</h3>
+                <h3>🎓 KEA COMPREHENSIVE SCHOOL — Users Dashboard</h3>
                 <p>Welcome back, <b>{st.session_state.full_name}</b> ({st.session_state.role})! Access termly results analysis, registered student rosters, fee payments, and teaching schedules seamlessly.</p>
             </div>
         """, unsafe_allow_html=True)
@@ -352,7 +352,7 @@ if page == "Dashboard":
         st.markdown("""
             <div class="support-card">
                 <h4 style="margin:0;">📞 School Support</h4>
-                <p style="margin:5px 0 0 0; font-size:16px; font-weight:bold;">+254 700 000 000</p>
+                <p style="margin:5px 0 0 0; font-size:16px; font-weight:bold;">+254 769 719 749</p>
                 <small>Migori County, Kenya</small>
             </div>
         """, unsafe_allow_html=True)
@@ -1727,7 +1727,7 @@ elif page == "School Contact":
                     st.error(f"Error updating contact: {e}")
     
     st.markdown("### Contact Details")
-    st.markdown("**Physical Address:** Migori County, Kenya")
-    st.markdown("**Phone:** +254 700 000 000")
-    st.markdown("**Email:** info@keacomprehensiveschool.ac.ke")
+    st.markdown("**Physical Address:** Kaler Ward, Nyatike South, Migori County, Kenya")
+    st.markdown("**Phone:** +254 726 502706")
+    st.markdown("**Email:** keacomprehensive@gmail.com")
     st.markdown("[View Location on Google Maps](https://maps.google.com)")
