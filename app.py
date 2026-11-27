@@ -713,6 +713,7 @@ elif page == "Students Registration":
                 if selected_learner:
                     current_photo = selected_learner.get("photo", "")
                     col_info, col_pic = st.columns([2, 1])
+                    
  # --- PAGE 2: STUDENTS REGISTRATION ---
 elif page == "Students Registration":
     if not is_admin_role:
