@@ -695,6 +695,82 @@ elif page == "Students Registration":
         except Exception as e:
             st.error(f"Error loading students: {e}")
 
+    with tab_edit_learner:
+        st.markdown("### ✏️ Edit Learner Details & Photo")
+        try:
+            all_st_res = supabase.table("students").select("*").execute()
+            all_st_list = sorted(all_st_res.data if all_st_res.data else [], key=lambda x: str(x.get("adm_no", "")))
+            
+            if not all_st_list:
+                st.info("No registered learners available to edit.")
+            else:
+                selected_learner = st.selectbox(
+                    "Choose Registered Learner",
+                    all_st_list,
+                    format_func=lambda s: f"{s.get('adm_no')} — {s.get('name')} ({s.get('grade')})"
+                )
+                
+                if selected_learner:
+                    current_photo = selected_learner.get("photo", "")
+                    col_info, col_pic = st.columns([2, 1])
+                    with col_pic:
+                        st.markdown("**Current Photo:**")
+                        if current_photo:
+                            st.markdown(f"<img src='{current_photo}' style='max-width:140px; max-height:160px; border:1px solid #374151; border-radius:6px;' />", unsafe_allow_html=True)
+                        else:
+                            st.caption("No photo currently uploaded.")
+                    
+                    with col_info:
+                        with st.form(key=f"edit_learner_form_{selected_learner.get('adm_no')}"):
+                            new_adm_no = st.text_input("Admission Number", value=str(selected_learner.get("adm_no", "")))
+                            new_assess_no = st.text_input("Assessment Number", value=str(selected_learner.get("assessment_no") or ""))
+                            new_name = st.text_input("Full Name", value=str(selected_learner.get("name", "")))
+                            
+                            curr_gender = str(selected_learner.get("gender", "Male")).capitalize()
+                            gender_idx = 0 if curr_gender != "Female" else 1
+                            new_gender = st.selectbox("Gender", ["Male", "Female"], index=gender_idx)
+                            
+                            grade_opts = [f"Grade {i}" for i in range(1, 10)]
+                            curr_grade = str(selected_learner.get("grade", "Grade 1"))
+                            grade_idx = grade_opts.index(curr_grade) if curr_grade in grade_opts else 0
+                            new_grade = st.selectbox("Grade", grade_opts, index=grade_idx)
+                            
+                            new_photo_file = st.file_uploader("Upload / Replace Learner Photo (Free size)", type=["png", "jpg", "jpeg"])
+                            
+                            if st.form_submit_button("💾 Save Learner Changes", type="primary"):
+                                if not new_adm_no.strip() or not new_name.strip():
+                                    st.warning("Admission Number and Full Name cannot be empty.")
+                                else:
+                                    try:
+                                        final_photo = encode_photo_upload(new_photo_file)
+                                        if final_photo is None:
+                                            final_photo = current_photo or ""
+                                        
+                                        old_adm = str(selected_learner.get("adm_no"))
+                                        updated_payload = {
+                                            "adm_no": new_adm_no.strip(),
+                                            "assessment_no": new_assess_no.strip(),
+                                            "name": new_name.strip(),
+                                            "gender": new_gender,
+                                            "grade": new_grade,
+                                            "photo": final_photo
+                                        }
+                                        
+                                        if new_adm_no.strip() != old_adm:
+                                            supabase.table("students").insert(updated_payload).execute()
+                                            supabase.table("marks").update({"adm_no": new_adm_no.strip(), "grade": new_grade}).eq("adm_no", old_adm).execute()
+                                            supabase.table("students").delete().eq("adm_no", old_adm).execute()
+                                        else:
+                                            supabase.table("students").upsert(updated_payload, on_conflict="adm_no").execute()
+                                            supabase.table("marks").update({"grade": new_grade}).eq("adm_no", old_adm).execute()
+                                            
+                                        st.success(f"Updated details for {new_name.strip()}!")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Error saving learner updates: {e}")
+        except Exception as e:
+            st.error(f"Error loading learners: {e}")
+
 # --- PAGE 3: MARKS ENTRY ---
 elif page == "Marks Entry":
     st.header("Subject-Specific Marks Entry Portal (2027)")
