@@ -713,6 +713,202 @@ elif page == "Students Registration":
                 if selected_learner:
                     current_photo = selected_learner.get("photo", "")
                     col_info, col_pic = st.columns([2, 1])
+ # --- PAGE 2: STUDENTS REGISTRATION ---
+elif page == "Students Registration":
+    if not is_admin_role:
+        st.error("Access Denied: Only HOI, DHOI, and Senior Teachers can register students.")
+        st.stop()
+        
+    st.header("Students Registration Portal (2027)")
+    tab_manual, tab_excel, tab_manage, tab_edit_learner = st.tabs([
+        "Manual Registration",
+        "Excel Spreadsheet Upload",
+        "Manage Registered Students",
+        "Edit Learner & Photo"
+    ])
+    
+    with tab_manual:
+        with st.form("manual_student_form"):
+            grade = st.selectbox("Grade", [f"Grade {i}" for i in range(1, 10)])
+            g_lower = grade.strip().lower()
+            is_junior = any(g in g_lower for g in ["grade 7", "grade 8", "grade 9"])
+            
+            adm_no = st.text_input("Admission Number")
+            if is_junior:
+                assessment_no = st.text_input("Assessment Number (Mandatory for Junior School)")
+            else:
+                assessment_no = st.text_input("Assessment Number (Optional for Primary)")
+                
+            name = st.text_input("Full Name")
+            gender = st.selectbox("Gender", ["Male", "Female"])
+            photo_file = st.file_uploader("Upload Learner Photo (Optional - Free size)", type=["png", "jpg", "jpeg"])
+            
+            submit_manual = st.form_submit_button("Admit Student")
+            
+            if submit_manual:
+                if adm_no and name and grade and (not is_junior or assessment_no):
+                    try:
+                        photo_b64 = encode_photo_upload(photo_file) or ""
+                        supabase.table("students").upsert({
+                            "adm_no": adm_no.strip(),
+                            "assessment_no": assessment_no.strip(),
+                            "name": name.strip(),
+                            "gender": gender,
+                            "grade": grade,
+                            "photo": photo_b64
+                        }, on_conflict="adm_no").execute()
+                        st.success(f"Successfully admitted {name} to {grade}!")
+                    except Exception as e:
+                        st.error(f"Error saving student: {e}")
+                else:
+                    st.warning("Please fill in all mandatory fields (Assessment Number is required for Junior School).")
+
+    with tab_excel:
+        st.markdown("Upload an Excel spreadsheet with columns: **Adm No**, **Assessment No**, **Name**, **Gender**, **Grade**")
+        uploaded_file = st.file_uploader("Choose Excel file", type=["xlsx", "xls"])
+        selected_grade_bulk = st.selectbox("Target Grade for Bulk Upload", [f"Grade {i}" for i in range(1, 10)])
+        
+        if uploaded_file and st.button("Process & Admit Students"):
+            try:
+                df = pd.read_excel(uploaded_file)
+                df.columns = [str(c).strip().lower() for c in df.columns]
+                
+                adm_col = next((c for c in df.columns if "adm" in c), None)
+                name_col = next((c for c in df.columns if "name" in c), None)
+                assess_col = next((c for c in df.columns if "assess" in c), None)
+                gender_col = next((c for c in df.columns if "gender" in c), None)
+                grade_col = next((c for c in df.columns if "grade" in c), None)
+                
+                if not adm_col or not name_col:
+                    st.error("Excel file must contain at least 'Adm No' and 'Name' columns.")
+                    st.stop()
+
+                records = []
+                for _, row in df.iterrows():
+                    adm_val = str(row[adm_col]).strip() if pd.notna(row[adm_col]) else None
+                    name_val = str(row[name_col]).strip() if pd.notna(row[name_col]) else None
+                    assess_val = str(row[assess_col]).strip() if assess_col and pd.notna(row[assess_col]) else ""
+                    gender_val = str(row[gender_col]).strip() if gender_col and pd.notna(row[gender_col]) else "Male"
+                    grade_val = str(row[grade_col]).strip() if grade_col and pd.notna(row[grade_col]) else selected_grade_bulk
+                    
+                    if adm_val and adm_val.lower() != "nan" and name_val and name_val.lower() != "nan":
+                        records.append({
+                            "adm_no": adm_val,
+                            "assessment_no": assess_val,
+                            "name": name_val,
+                            "gender": gender_val,
+                            "grade": grade_val
+                        })
+
+                if records:
+                    supabase.table("students").upsert(records, on_conflict="adm_no").execute()
+                    st.success(f"Successfully uploaded and admitted {len(records)} students!")
+            except Exception as e:
+                st.error(f"Error processing excel file: {e}")
+
+    with tab_manage:
+        st.markdown("### View, Edit & Deregister Students / Grades")
+        filter_grade = st.selectbox("Filter by Grade", ["All Grades"] + [f"Grade {i}" for i in range(1, 10)])
+        
+        try:
+            query = supabase.table("students").select("*")
+            if filter_grade != "All Grades":
+                query = query.eq("grade", filter_grade)
+            
+            res = query.execute()
+            students_list = res.data if res.data else []
+            
+            if not students_list:
+                st.info("No students found.")
+            else:
+                df_students = pd.DataFrame(students_list)
+                cols = [c for c in ["adm_no", "assessment_no", "name", "gender", "grade"] if c in df_students.columns]
+                df_students = df_students[cols]
+                
+                st.markdown("#### Registered Students Roster")
+                edited_students_df = st.data_editor(
+                    df_students,
+                    column_config={
+                        "adm_no": st.column_config.TextColumn("Adm No", disabled=True),
+                        "assessment_no": st.column_config.TextColumn("Assessment No"),
+                        "name": st.column_config.TextColumn("Full Name"),
+                        "gender": st.column_config.SelectboxColumn("Gender", options=["Male", "Female"]),
+                        "grade": st.column_config.SelectboxColumn("Grade", options=[f"Grade {i}" for i in range(1, 10)])
+                    },
+                    use_container_width=True,
+                    hide_index=True,
+                    key="students_roster_editor"
+                )
+                
+                if st.button("💾 Save Changes to Database", type="primary"):
+                    try:
+                        records_to_update = edited_students_df.to_dict(orient="records")
+                        supabase.table("students").upsert(records_to_update, on_conflict="adm_no").execute()
+                        st.success("Successfully updated student records!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error updating records: {e}")
+
+                st.markdown("---")
+                st.markdown("#### Deregister Options")
+                d_mode = st.radio("Deregistration Mode", ["Individual Learner", "Whole Grade"], horizontal=True)
+                
+                if d_mode == "Individual Learner":
+                    col_del1, col_del2 = st.columns([3, 1])
+                    with col_del1:
+                        student_to_delete = st.selectbox(
+                            "Select Student to Deregister", 
+                            students_list, 
+                            format_func=lambda s: f"Adm No: {s['adm_no']} — {s['name']} ({s['grade']})"
+                        )
+                    with col_del2:
+                        st.write("")
+                        st.write("")
+                        confirm_delete = st.button("🚨 Deregister Student", type="secondary")
+                        
+                    if confirm_delete and student_to_delete:
+                        adm_del = student_to_delete["adm_no"]
+                        try:
+                            supabase.table("marks").delete().eq("adm_no", adm_del).execute()
+                            supabase.table("students").delete().eq("adm_no", adm_del).execute()
+                            st.success("Successfully deregistered student.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error deregistering student: {e}")
+                else:
+                    grade_to_clear = st.selectbox("Select Whole Grade to Deregister", [f"Grade {i}" for i in range(1, 10)])
+                    confirm_grade_del = st.button("⚠️ Deregister All Learners in Grade", type="secondary")
+                    if confirm_grade_del:
+                        try:
+                            grade_students = [s for s in students_list if str(s.get("grade", "")).strip().lower() == grade_to_clear.lower()]
+                            for gs in grade_students:
+                                supabase.table("marks").delete().eq("adm_no", gs["adm_no"]).execute()
+                                supabase.table("students").delete().eq("adm_no", gs["adm_no"]).execute()
+                            st.success(f"Successfully deregistered all learners in {grade_to_clear}.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error clearing grade: {e}")
+        except Exception as e:
+            st.error(f"Error loading students: {e}")
+
+    with tab_edit_learner:
+        st.markdown("### ✏️ Edit Learner Details & Photo")
+        try:
+            all_st_res = supabase.table("students").select("*").execute()
+            all_st_list = sorted(all_st_res.data if all_st_res.data else [], key=lambda x: str(x.get("adm_no", "")))
+            
+            if not all_st_list:
+                st.info("No registered learners available to edit.")
+            else:
+                selected_learner = st.selectbox(
+                    "Choose Registered Learner",
+                    all_st_list,
+                    format_func=lambda s: f"{s.get('adm_no')} — {s.get('name')} ({s.get('grade')})"
+                )
+                
+                if selected_learner:
+                    current_photo = selected_learner.get("photo", "")
+                    col_info, col_pic = st.columns([2, 1])
                     with col_pic:
                         st.markdown("**Current Photo:**")
                         if current_photo:
@@ -770,7 +966,7 @@ elif page == "Students Registration":
                                         st.error(f"Error saving learner updates: {e}")
         except Exception as e:
             st.error(f"Error loading learners: {e}")
-
+            
 # --- PAGE 3: MARKS ENTRY ---
 elif page == "Marks Entry":
     st.header("Subject-Specific Marks Entry Portal (2027)")
