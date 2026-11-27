@@ -694,7 +694,7 @@ elif page == "Students Registration":
                             st.error(f"Error clearing grade: {e}")
         except Exception as e:
             st.error(f"Error loading students: {e}")
-
+            
     with tab_edit_learner:
         st.markdown("### ✏️ Edit Learner Details & Photo")
         try:
